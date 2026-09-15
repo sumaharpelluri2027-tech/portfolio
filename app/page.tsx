@@ -5,6 +5,8 @@ import { AnimatePresence, motion, useInView, useReducedMotion, useScroll, useSpr
 import { ArrowDown, ArrowUpRight, Check, ChevronRight, Command, Github, Linkedin, Mail, Moon, Sun, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cases, links, metrics, projects, thinking } from "./data";
+import SystemField from "./system-field";
+import MotionLab from "./motion-lab";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -68,11 +70,12 @@ function Hero() {
     <div className="hero-grid" aria-hidden="true" />
     <div className="hero-copy">
       <motion.p className="eyebrow" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .1 }}>MISSION CONTROL / 2026</motion.p>
-      <motion.h1 initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .8, ease }}>Messy process in.<br/><em>Intelligent system out.</em></motion.h1>
+      <motion.h1 initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .8, ease }}>I see the mess.<br/><em>I build the system.</em></motion.h1>
       <motion.p className="hero-lede" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .7, delay: .18, ease }}>I build the connective tissue between AI, data, operations, and product—so decisions move faster and work stops leaking through the gaps.</motion.p>
       <motion.div className="hero-links" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .35 }}><a className="button primary" href="#lab">Enter the product lab <ArrowDown size={15}/></a><a className="text-link" href={links.email}>Start a conversation <ArrowUpRight size={14}/></a></motion.div>
     </div>
-    <motion.div className="hero-portrait" style={{ y: portraitY }}><Image src="/assets/sumahar.webp" alt="Sumahar Pelluri" fill sizes="(max-width: 800px) 80vw, 36vw" priority /><div className="portrait-tag"><span>SP / 01</span><span>GURUGRAM, IN</span></div></motion.div>
+    <motion.div className="hero-portrait" style={{ y: portraitY }}><Image src="/assets/sumahar-portrait.webp" alt="Sumahar Pelluri, studio portrait" fill sizes="(max-width: 800px) 90vw, 38vw" priority /><div className="portrait-tag"><span>SUMAHAR PELLURI</span><span>SYSTEMS BUILDER</span></div></motion.div>
+    <SystemField/>
     <motion.div className="mission-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .7, delay: .25, ease }}>
       <div className="panel-head"><span>CURRENT MISSION</span><span className="live"><i/>ACTIVE</span></div>
       <div className="mission-main"><span>01</span><div><p>CURRENT FOCUS</p><strong>Building systems that turn ambiguity into action.</strong></div></div>
@@ -106,7 +109,7 @@ function Architecture({ steps }: { steps: string[] }) { return <div className="a
 
 function ProductLab() {
   return <section id="lab" className="lab"><Reveal className="section-top"><div><p className="eyebrow">PRODUCT LAB / 06 BUILDS</p><h2>Ideas are cheap.<br/>Shipping is evidence.</h2></div><p>Each build starts with a broken decision or workflow. The interface is the visible edge; the system underneath is the work.</p></Reveal>
-    <div className="project-list">{projects.map((p, idx) => <Reveal key={p.id}><article id={p.id} className={`project ${idx === 0 ? "featured" : ""}`}>
+    <MotionLab/><div className="project-list">{projects.map((p, idx) => <Reveal key={p.id}><article id={p.id} className={`project ${idx === 0 ? "featured" : ""}`}>
       <div className="project-meta"><span>{p.index}</span><span>{p.category}</span><span className={p.status === "LIVE" ? "status-live" : "status-build"}><i/>{p.status}</span></div>
       <div className="project-heading"><h3>{p.name}</h3>{p.url && <a href={p.url} target="_blank" rel="noreferrer" aria-label={`Open ${p.name}`}><ArrowUpRight/></a>}</div>
       <p className="project-thesis">“{p.thesis}”</p>
@@ -132,7 +135,7 @@ function LiveDashboard() {
   return <section className="dashboard"><Reveal className="dashboard-head"><div><p className="eyebrow">LIVE DASHBOARD</p><h2>What’s on the bench.</h2></div><span className="live"><i/>SYSTEM ONLINE</span></Reveal><Reveal className="dashboard-shell"><div className="dash-top"><div><span>SHIPPING NEXT</span><b>Priya / production guardrails</b></div><div><span>UPDATED</span><b>SEP 2026</b></div></div><div className="dash-table"><div className="dash-row labels"><span>PROJECT</span><span>STATUS</span><span>PROGRESS</span></div>{rows.map(r => <div className="dash-row" key={String(r[0])}><b>{r[0]}</b><span><i className="row-dot"/>{r[1]}</span><div><span>{r[2]}</span><i><b style={{ width: `${r[3]}%` }}/></i></div></div>)}</div><div className="update-log"><span>RECENT UPDATES</span><p><b>01</b> Portfolio reframed as a systems product</p><p><b>02</b> Six builds documented as product cases</p><p><b>03</b> Operating metrics moved to the surface</p></div></Reveal></section>;
 }
 
-function Contact() { return <footer id="contact"><div className="contact-copy"><p className="eyebrow">OPEN CHANNEL / 2026</p><h2>Have a messy<br/>system worth fixing?</h2><p>I’m open to Data/BI, Founder’s Office, and Product roles—and to conversations with people building ambitious, useful things.</p><a className="button primary" href={links.email}>Start with an email <ArrowUpRight size={15}/></a></div><div className="contact-side"><Image src="/assets/sumahar-portrait.webp" alt="Sumahar Pelluri" fill sizes="(max-width: 800px) 100vw, 35vw"/><div className="socials"><a href={links.linkedin} target="_blank" rel="noreferrer"><Linkedin size={17}/>LinkedIn<ArrowUpRight size={14}/></a><a href={links.github} target="_blank" rel="noreferrer"><Github size={17}/>GitHub<ArrowUpRight size={14}/></a><a href={links.email}><Mail size={17}/>Email<ArrowUpRight size={14}/></a></div></div><div className="footer-bottom"><span>© 2026 SUMAHAR PELLURI</span><span>SYSTEMS BUILDER / GURUGRAM</span><a href="#top">BACK TO TOP ↑</a></div></footer>; }
+function Contact() { return <footer id="contact"><div className="contact-copy"><p className="eyebrow">OPEN CHANNEL / 2026</p><h2>Have a messy<br/>system worth fixing?</h2><p>I’m open to Data/BI, Founder’s Office, and Product roles—and to conversations with people building ambitious, useful things.</p><a className="button primary" href={links.email}>Start with an email <ArrowUpRight size={15}/></a></div><div className="contact-side"><Image src="/assets/sumahar-alternate.webp" alt="Sumahar Pelluri" fill sizes="(max-width: 800px) 100vw, 35vw"/><div className="socials"><a href={links.linkedin} target="_blank" rel="noreferrer"><Linkedin size={17}/>LinkedIn<ArrowUpRight size={14}/></a><a href={links.github} target="_blank" rel="noreferrer"><Github size={17}/>GitHub<ArrowUpRight size={14}/></a><a href={links.email}><Mail size={17}/>Email<ArrowUpRight size={14}/></a></div></div><div className="footer-bottom"><span>© 2026 SUMAHAR PELLURI</span><span>SYSTEMS BUILDER / GURUGRAM</span><a href="#top">BACK TO TOP ↑</a></div></footer>; }
 
 export default function Home() {
   const [palette, setPalette] = useState(false); const [devMode, setDevMode] = useState(false);

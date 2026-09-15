@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cases, links, metrics, projects, thinking } from "./data";
 import SystemField from "./system-field";
 import MotionLab from "./motion-lab";
+import CinematicHero from "./cinematic-hero";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -66,7 +67,7 @@ function Hero() {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
   const portraitY = useTransform(scrollYProgress, [0, 1], [0, 50]);
-  return <section id="top" className="hero" ref={ref}>
+  return <section id="mission" className="hero" ref={ref}>
     <div className="hero-grid" aria-hidden="true" />
     <div className="hero-copy">
       <motion.p className="eyebrow" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .1 }}>MISSION CONTROL / 2026</motion.p>
@@ -142,5 +143,5 @@ export default function Home() {
   const { scrollYProgress } = useScroll(); const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30, restDelta: .001 });
   const keyHandler = useCallback((e: KeyboardEvent) => { if ((e.key === "/" && !(e.target instanceof HTMLInputElement)) || (e.metaKey && e.key.toLowerCase() === "k")) { e.preventDefault(); setPalette(true); } if (e.key === "Escape") setPalette(false); }, []);
   useEffect(() => { window.addEventListener("keydown", keyHandler); return () => window.removeEventListener("keydown", keyHandler); }, [keyHandler]);
-  return <><motion.div className="progress" style={{ scaleX }}/><Header openPalette={() => setPalette(true)}/><main><Hero/><ProofStrip/><CaseFiles/><ProductLab/><Thinking/><LiveDashboard/></main><Contact/><CommandPalette open={palette} close={() => setPalette(false)} devMode={devMode} setDevMode={setDevMode}/>{devMode && <div className="dev-console"><button onClick={() => setDevMode(false)} aria-label="Close developer mode"><X size={13}/></button><p>&gt; SYSTEM LOGS</p><span>build.version: SYSTEMS/01</span><span>git.commit: {process.env.NEXT_PUBLIC_BUILD_SHA}</span><span>render.mode: {document?.documentElement.dataset.theme || "dark"}</span><span>status: all systems nominal</span><span>&gt; minimal_terminal enabled_</span></div>}</>;
+  return <><motion.div className="progress" style={{ scaleX }}/><Header openPalette={() => setPalette(true)}/><main><CinematicHero/><Hero/><ProofStrip/><CaseFiles/><ProductLab/><Thinking/><LiveDashboard/></main><Contact/><CommandPalette open={palette} close={() => setPalette(false)} devMode={devMode} setDevMode={setDevMode}/>{devMode && <div className="dev-console"><button onClick={() => setDevMode(false)} aria-label="Close developer mode"><X size={13}/></button><p>&gt; SYSTEM LOGS</p><span>build.version: SYSTEMS/01</span><span>git.commit: {process.env.NEXT_PUBLIC_BUILD_SHA}</span><span>render.mode: {document?.documentElement.dataset.theme || "dark"}</span><span>status: all systems nominal</span><span>&gt; minimal_terminal enabled_</span></div>}</>;
 }

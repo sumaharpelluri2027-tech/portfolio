@@ -3,6 +3,7 @@ import "@fontsource-variable/manrope";
 import "@fontsource-variable/space-grotesk";
 import "./globals.css";
 import "./visual-upgrade.css";
+import "./cinematic.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://github.com/sumaharpelluri2027-tech/portfolio";
 

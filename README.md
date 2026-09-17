@@ -5,7 +5,7 @@ A product-led portfolio built around one positioning: **I turn messy manual proc
 ## Stack
 
 - Next.js 15, React 19, TypeScript
-- Framer Motion for intentional interface motion
+- Lightweight CSS/SVG motion, with reduced-motion support
 - Self-hosted variable fonts and optimized WebP assets
 - App Router metadata routes for SEO, robots, sitemap, and 404 handling
 
@@ -35,7 +35,7 @@ The repository includes `render.yaml` for a Render Blueprint. It also deploys wi
 - Developer mode: command palette → Developer mode
 - Case Files: interactive experience archive
 - Six independent screens: Mission Control, Product Lab, Case Files, The Numbers, My Operating System, and Contact
-- Product Lab: six builds with Overview / System / Next subtabs
+- Product Lab: six builds with The flow / Story / Next subtabs
 - Case Files and impact: separate company tabs with large metrics and proportional charts
 - Persistent original Suno soundtrack: Chasing the Horizon; tap Play to load the audio
 - Live date/time in IST, animated system diagram, and reduced-motion support
@@ -47,3 +47,9 @@ All factual claims, metrics, project URLs, social links, and original photograph
 Replaced the stacked, scroll-driven presentation with a navigable portfolio workspace. Existing source facts, product links, photographs, and the original uploaded HTML soundtrack are retained. Audio uses `preload="none"` and is not autoplayed.
 
 Validation: TypeScript and production build pass; desktop browser preview verified.
+
+## Visual restoration
+
+The original HTML’s six organization logos, data-pipeline story, conversion funnel, skills explorer, milestones, and additional project concepts are restored in compact tabs. Case files and products lead with images and diagrams; longer context lives behind Story tabs. The soundtrack uses a custom vinyl player with seeking and volume controls. Old project hashes and direct Decco/Priya shortcuts are supported.
+
+Verification: production build and TypeScript checks; browser checks for all six main screens, seven project tabs, company switching, toolkit/milestones, command navigation, 320px/390px widths, light/dark contrast, and soundtrack play/pause/seeking.

@@ -1,13 +1,11 @@
 services:
   - type: web
-    name: sumahar-systems-portfolio
-    runtime: node
-    plan: free
+    name: sumahar-portfolio
+    runtime: static
     buildCommand: npm ci && npm run build
-    startCommand: npm run start -- -H 0.0.0.0
-    healthCheckPath: /
+    staticPublishPath: ./out
     envVars:
       - key: NODE_VERSION
         value: 22
       - key: NEXT_PUBLIC_SITE_URL
-        sync: false
+        value: https://sumaharpelluri.in

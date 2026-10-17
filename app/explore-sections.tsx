@@ -89,6 +89,9 @@ function ProcessMethod() {
 
 function Sketchbook() {
   const sketches = [
+    ["Arogya", "ROUND 2 · THE KEN", "Agentic AI for family health — reorders medicine for a parent in another city, with check-up scheduling next. Shortlisted for Round 2 of The Ken’s Great Rewiring."],
+    ["Snip", "PROTOTYPE", "A marketplace and CRM connecting people with tailors, boutiques and designers across India. First prototype built on Lovable."],
+    ["FoodTruth AI", "VALIDATING", "Scan food, know what you’re actually buying — an AI that decodes packaged-food claims, ingredients and nutrition for fitness-focused buyers."],
     ["Brew Home", "PROTOTYPE", "Indian specialty coffee, a flavour quiz, and a subscription flow."],
     ["IKSHANA Z INC", "DELIVERED", "Multi-state incorporation analysis. Delaware recommendation adopted by the client."],
     ["Decoding F&B", "PITCHED", "Fusion condiments: Chilli Crisp × Tadka and Kokum Hot Sauce."],
@@ -111,6 +114,8 @@ function Milestones() {
   const milestones = [
     ["AIR 8", "BAJA SAE Enduro", "Designed the hybrid braking architecture."],
     ["VP", "AI & Analytics Wing", "Masters’ Union."],
+    ["04", "Case Union 4.0", "Four of the Wing’s AI problem statements shortlisted for MU’s national case competition."],
+    ["R2", "The Ken · Great Rewiring", "Team shortlisted to Round 2 with Arogya, an agentic AI for family health."],
     ["02", "Leadership campaigns", "Led strategy for FOCOS Club President and Google Fraternity President."],
     ["1st", "Powerlifting Deadlift", "First place in weight category."],
     ["AWS", "Cloud Practitioner", "Certified in 2022."],

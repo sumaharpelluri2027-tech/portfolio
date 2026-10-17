@@ -5,7 +5,7 @@ import "./globals.css";
 import "./explore-sections.css";
 import "./ambient-controls.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://github.com/sumaharpelluri2027-tech/portfolio";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://sumaharpelluri.in";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

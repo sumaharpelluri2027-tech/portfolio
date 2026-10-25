@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: #030014; color: #fff; font-family: "Space Grotesk", "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+::selection { background: #ccff00; color: #000; }
+:focus-visible { outline: 2px solid #ccff00; outline-offset: 3px; border-radius: 4px; }
+@media (hover: hover) and (pointer: fine) { html, body, a, button { cursor: none; } input, textarea, select { cursor: text; } }
+
+.stroke-text { color: transparent; -webkit-text-stroke: 1px #fff; }
+@media (min-width: 768px) { .stroke-text { -webkit-text-stroke-width: 1.5px; } }
+@media (min-width: 1280px) { .stroke-text { -webkit-text-stroke-width: 2px; } }
+.stroke-faint { color: transparent; -webkit-text-stroke: 1px rgba(255, 255, 255, 0.15); }
+
+@keyframes marq { to { transform: translateX(-50%); } }
+.marquee { animation: marq 36s linear infinite; }
+.marquee-rev { animation: marq 44s linear infinite reverse; }
+@keyframes wave { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+.voice-bar { animation: wave 1.3s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

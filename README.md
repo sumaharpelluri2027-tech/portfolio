@@ -1,10 +1,15 @@
 # sumaharpelluri.in
 
-Personal portfolio of Sumahar Pelluri, served as a static site on Render.
+Portfolio of Sumahar Pelluri: systems builder across data, operations and AI.
 
-- `src/page.html` is the page source (markup, styles and script in one file).
-- `python3 build.py` (run from a folder that has `src/` and `assets/`) produces `dist-domain/`, which is copied into `site/`.
-- `site/` is what gets published: `index.html`, `assets/` (images, logos, soundtrack), favicon, robots and sitemap.
-- Render runs `npm ci && npm run build`, which copies `site/` to `out/`.
+**Stack:** React 18 · Vite · TypeScript · Tailwind CSS · Framer Motion · Three.js (particle field with bloom and pointer repulsion).
 
-Soundtrack: "Chasing the Horizon", original.
+```bash
+npm install
+npm run dev      # local dev server
+npm run build    # type-check + production build to ./out (what Render serves)
+```
+
+Pages are hash routes (`#/work`, `#/experience`, `#/labs`, `#/about`, `#/contact`) so the site runs on any static host.
+Content lives in `src/data.ts`; the chatbot persona and offline answers in `src/bot.ts`.
+Add `?nogl` to the URL to disable WebGL (handy for screenshots).

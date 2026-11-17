@@ -1,7 +1,7 @@
 export const A = (p: string) => `assets/${p}`;
 export const EMAIL = "sumahar.pelluri2027@mastersunion.org";
 /** WhatsApp number with country code, digits only (e.g. "919876543210"). Empty hides the WhatsApp button. */
-export const WHATSAPP = "";
+export const WHATSAPP = "918331957491";
 export const LINKS = {
   linkedin: "https://www.linkedin.com/in/sumahar-pelluri-53025b170/",
   github: "https://github.com/sumaharpelluri2027-tech",
@@ -51,8 +51,6 @@ export const PRODUCTS: Product[] = [
   { name: "Decco Store", tag: "D2C commerce", status: "₹3L in 30 days", live: true, img: "img/decco-shot.webp", href: LINKS.decco, cta: "Visit the store", d: "A vintage-inspired home brand. I picked the products, set prices, built the store and campaigns, then sold in person at our stall." },
   { name: "FitGenie AI", tag: "AI health", status: "Live", live: true, img: "img/fitgenie.webp", href: "https://fitgenie-ai-buddy.lovable.app", cta: "Try it", d: "Personalised nutrition and workout plans, progress tracking and fitness discovery in one loop." },
   { name: "Smart Shopper AI", tag: "Commerce intelligence", status: "Live", live: true, img: "img/shopper.webp", href: "https://shopper-smartly.lovable.app", cta: "Try it", d: "Compares price, seller trust, card offers and delivery speed across e-commerce and quick commerce." },
-  { name: "Priya", tag: "AI voice agent", status: "In build", live: false, d: "A two-way call agent for a dropshipping business, on Bolna with a Fish Audio cloned voice, designed with the human handoff first." },
-  { name: "Brew Home", tag: "D2C prototype", status: "Prototype", live: false, img: "img/brewhome.webp", d: "A specialty Indian coffee storefront with a flavour quiz that recommends a roast, plus subscriptions." },
 ];
 
 export type Bar = { l: string; was?: number; v: number; b: string };
@@ -107,7 +105,6 @@ export const SKETCHES = [
   { s: "Round 2 · The Ken", hot: true, t: "Arogya", d: "Agentic AI for family health that reorders medicine for a parent in another city. Shortlisted for Round 2 of The Ken's Great Rewiring." },
   { s: "Prototype", t: "Snip", d: "A marketplace and CRM connecting people with tailors, boutiques and designers across India." },
   { s: "Live · NutriSathi", hot: true, t: "NutriSathi (FoodTruth AI)", d: "Scan a packaged food to see its claims, ingredients and nutrition explained. Live at nutrisathi.app.", href: "https://nutrisathi.app" },
-  { s: "Delivered", hot: true, t: "IKSHANA Z INC", d: "A multi-state incorporation analysis on tax and permits. The client adopted my Delaware recommendation." },
   { s: "Completed", t: "TrustMRR EDA", d: "Exploratory analysis of a SaaS dataset, written up as a consulting-style executive summary." },
   { s: "Completed", t: "AI Insurance Assistant", d: "Claims-processing automation in Make.com, with a map of the Indian insurtech sector." },
   { s: "Pitched", t: "Decoding F&B", d: "Fusion condiments: Chilli Crisp × Tadka and a Kokum hot sauce. 16 slides cut to six for a five-minute panel." },
@@ -125,7 +122,7 @@ export const METHOD = [
 
 export const TOOLKIT: { name: string; head: string; skills: [string, string][] }[] = [
   { name: "Data & analytics", head: "50% → 95% data accuracy at Rabbit Invest, from QC automation across CAMS, KFin and AMFI.", skills: [["SQL", "Querying and reconciling fund data across three registrar feeds every day at Rabbit Invest."], ["Pandas", "The workhorse behind every reconciliation and QC script I wrote at Rabbit."], ["ETL", "Ingestion, validation and QC as one repeatable pipeline instead of one-off clean-ups."], ["Data validation", "Null, duplicate and outlier rules that moved accuracy from 50% to 95%."], ["Funnel analysis", "My Myntra project, which informed a CEO-level budget reallocation."], ["Looker", "Dashboards the sales team actually triaged from, as conversion went from 10% to 50%."], ["EDA", "The TrustMRR SaaS dataset, written up as a consulting-style executive summary."]] },
-  { name: "Automation & AI", head: "80% of manual ops automated, and BoardIQ, a full Gemini-powered decision platform, shipped end to end.", skills: [["Python automation", "Replaced the recurring manual operations work that used to eat the team's week."], ["Make.com", "No-code orchestration, including a working AI insurance claims assistant."], ["Agentic AI design", "Designing the decision chain, not just the prompt. BoardIQ and Arogya are the proof."], ["Gemini", "Reasoning and search grounding behind BoardIQ's verdicts and memos."], ["Google Scripts", "The glue between Sheets, mail and the registrar APIs at Rabbit."], ["REST APIs", "Pulled CAMS, KFin and AMFI data directly instead of waiting for exports."], ["Selenium", "Scraped what had no API worth using."], ["Bolna + Fish Audio", "Priya, a two-way AI voice call agent with a cloned voice."]] },
+  { name: "Automation & AI", head: "80% of manual ops automated, and BoardIQ, a full Gemini-powered decision platform, shipped end to end.", skills: [["Python automation", "Replaced the recurring manual operations work that used to eat the team's week."], ["Make.com", "No-code orchestration, including a working AI insurance claims assistant."], ["Agentic AI design", "Designing the decision chain, not just the prompt. BoardIQ and Arogya are the proof."], ["Gemini", "Reasoning and search grounding behind BoardIQ's verdicts and memos."], ["Google Scripts", "The glue between Sheets, mail and the registrar APIs at Rabbit."], ["REST APIs", "Pulled CAMS, KFin and AMFI data directly instead of waiting for exports."], ["Selenium", "Scraped what had no API worth using."]] },
   { name: "Ops & management", head: "Built the ops function from zero as a founding member, and sat in founder-level decisions.", skills: [["SOP design", "Wrote the operating manual for a function that had none."], ["KPI governance", "Defined what got measured, so automation went after the real bottleneck."], ["Zoho CRM", "Rebuilt reporting for +40% pipeline visibility across 100+ SMB accounts."], ["Founder-level comms", "Represented operations in founder meetings at Rabbit Invest."], ["Recruitment ops", "Ran the Wing's hiring workbook, feedback and QR systems as VP."], ["Event ops", "Wing events end to end: logistics, communication and the debrief."]] },
   { name: "Product & growth", head: "₹3 lakh revenue on Decco Store: storefront, catalogue, pricing, campaigns and the physical stall.", skills: [["Shopify", "D2C storefront mechanics: catalogue, pricing and checkout."], ["Lovable", "Four live products shipped on it, including Decco Store and FitGenie."], ["React + TypeScript", "BoardIQ's twelve-screen front end, and this site."], ["Campaign analytics", "Wired campaigns to KPIs so spend could be judged, not guessed."], ["Pricing", "Set the margins that made Decco profitable, not just busy."]] },
   { name: "Cloud & tooling", head: "AWS Cloud Practitioner (2022), and everything I build gets deployed, not left on localhost.", skills: [["AWS", "Certified Cloud Practitioner, 2022."], ["Render", "Hosts BoardIQ, the Wing site and this portfolio."], ["Git + GitHub", "Every build versioned at github.com/sumaharpelluri2027-tech."], ["Three.js", "The particle field behind this page."]] },
@@ -136,7 +133,6 @@ export const MILESTONES = [
   ["VP", "AI & Analytics Wing", "Elected to lead the Wing at Masters' Union."],
   ["04", "Case Union 4.0", "Four Wing problem statements shortlisted nationally."],
   ["R2", "The Ken · Great Rewiring", "Shortlisted to Round 2 with Arogya."],
-  ["02", "Leadership campaigns", "Strategy for FOCOS Club and Google Fraternity Presidents."],
   ["1ST", "Powerlifting deadlift", "First place in my weight category."],
   ["AWS", "Cloud Practitioner", "Certified in 2022."],
   ["TOP 5%", "State cohort", "Class XII 94.5%, Class X 9.7 CGPA."],
@@ -151,3 +147,13 @@ export const STORY = [
   { n: "CHAPTER 06", bg: "aiaw-event", big: "Then I started shipping my own products.", sub: "And leading the AI & Analytics Wing at Masters' Union.", chips: ["BoardIQ", "Wing website", "FitGenie AI", "Smart Shopper", "Decco Store", "Priya"] },
   { n: "NOW", bg: "network", portrait: true, big: "Sumahar Pelluri", sub: "PGP-TBM '27, Masters' Union. Open to Data/BI, Founder's Office and Product roles.", chips: ["Close the story to explore →"] },
 ] as { n: string; bg: string; big: string; sub: string; metric?: string; chips?: string[]; portrait?: boolean }[];
+
+/** The career road, in order. */
+export interface Stop { when: string; where: string; logo?: string; place: string; role: string; line: string; stats: [string, string][] }
+export const JOURNEY: Stop[] = [
+  { when: "→ 2022", where: "VIT, Vellore", logo: "vit", place: "Vellore", role: "B.Tech, Mechanical Engineering", line: "Designed the hybrid braking system for our BAJA SAE buggy. That's the car in this garage.", stats: [["8.39", "CGPA"], ["AIR 8", "BAJA SAE India"]] },
+  { when: "Jan – Jun 2022", where: "Myntra", logo: "myntra", place: "Remote · final semester", role: "Data Analyst Intern", line: "Built a conversion-funnel analysis from scratch that informed a CEO-level budget call.", stats: [["CEO-level", "budget reallocation"]] },
+  { when: "Jul 2022 – Jan 2024", where: "Wipro", logo: "wipro", place: "Hyderabad", role: "Project Engineer", line: "Rebuilt CRM reporting and funnel analysis across 100+ SMB accounts.", stats: [["+40%", "pipeline visibility"], ["+50%", "retention funnel"]] },
+  { when: "Jan 2024 – Jun 2026", where: "Rabbit Invest", logo: "rabbit-invest", place: "Delhi · about the 2nd hire", role: "Senior Associate → Lead, Operations & Automation", line: "Joined a week after it started, built operations from zero, and was promoted to lead after about 18 months.", stats: [["50→95%", "data accuracy"], ["80%", "manual ops automated"], ["5×", "sales conversion"]] },
+  { when: "Now · class of 2027", where: "Masters' Union", logo: "masters-union", place: "Gurugram", role: "PGP, Technology & Business Management · VP, AI & Analytics Wing", line: "Shipping products, competing in national cases and leading the Wing.", stats: [["4", "live AI builds"], ["R2", "The Ken case"], ["₹3L", "Decco in 30 days"]] },
+];

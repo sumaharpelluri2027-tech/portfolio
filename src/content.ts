@@ -3,7 +3,7 @@ import { LINKS } from "./data";
 /** Everything you can click in the garage. Car parts first, then the garage props. */
 export type StationId =
   | "steering" | "accelerator" | "engine" | "brakes" | "fuel" | "nav" | "cluster"
-  | "toolchest" | "trophies" | "crew" | "decco" | "board" | "driver" | "shipped" | "prototypes" | "laptop" | "radio" | "clipboard" | "powerbox" | "scanner";
+  | "toolchest" | "trophies" | "crew" | "decco" | "board" | "driver" | "shipped" | "prototypes" | "laptop" | "radio" | "clipboard" | "powerbox" | "scanner" | "exit" | "journey";
 
 export type CarPart = "steering" | "accelerator" | "engine" | "brakes" | "fuel" | "nav" | "cluster";
 
@@ -25,6 +25,7 @@ export interface JobCard {
   where: string;
   complaint: string;           // the problem
   work: string;                // what I did
+  did?: string[];              // the same, as three short lines
   result: { big: string; label: string };
   extra?: string;
   tools: string[];
@@ -36,6 +37,7 @@ export const JOBS: Record<CarPart, JobCard> = {
   brakes: {
     id: "brakes", no: "01", part: "Brakes", area: "Data trust", hover: "Brakes · data you can trust",
     title: "The system that stops bad data before it moves",
+    did: ["Pulled CAMS, KFin and AMFI data into one pipeline", "Wrote the checks that stop bad rows before they move", "Put a dashboard on top so ops could trust it"],
     where: "Rabbit Invest · Operations & Automation Lead · 2024–2026",
     complaint: "Investor data arrived split across three registrars. Accuracy sat at 50–60%, and the ops team absorbed the doubt by hand.",
     work: "Built ingestion, validation and QC across CAMS, KFin and AMFI, with reconciliation scripts and KPI dashboards on top. I designed the braking system on our BAJA car; this is the same job for data.",
@@ -58,6 +60,7 @@ publish(rows - bad)`,
   engine: {
     id: "engine", no: "02", part: "Engine", area: "Operations", hover: "Engine · operations",
     title: "An ops function that runs without being pushed",
+    did: ["Wrote the SOPs first", "Automated the repeat work with Python and Apps Script", "Ran operating reviews with the founders"],
     where: "Rabbit Invest · founding member, about the second hire",
     complaint: "A new fintech with no operations function: every recurring task was manual, and errors came back every week.",
     work: "Wrote the SOPs first, then automated them with Python, Google Apps Script and REST APIs. Ran founder-level operating reviews on the numbers.",
@@ -82,6 +85,7 @@ function nightlyRun() {
   accelerator: {
     id: "accelerator", no: "03", part: "Accelerator", area: "Growth", hover: "Accelerator · growth",
     title: "A funnel that finally converted",
+    did: ["Built dashboards on the KPIs sales used", "Automated the marketing team's lead flow", "Ran pricing and campaigns at Decco Store"],
     where: "Rabbit Invest · and Decco Store",
     complaint: "Leads came in, but nobody could see where they dropped out, and the marketing team moved leads by hand.",
     work: "Wired dashboards to the KPIs sales actually triaged from, and automated the marketing team's lead flow on my own initiative. At Decco Store I picked products, set prices and ran the campaigns.",
@@ -107,11 +111,11 @@ WINDOW w AS (ORDER BY stage_order);`,
   steering: {
     id: "steering", no: "04", part: "Steering", area: "Strategy", hover: "Steering · strategy",
     title: "Changing direction with the numbers in hand",
-    where: "Rabbit Invest · and IKSHANA Z INC",
+    did: ["Compared competitor products", "Modelled cost against revenue", "Proposed selling to fund distributors for a fixed fee"],
+    where: "Rabbit Invest · founding team",
     complaint: "A B2C investing app growing slowly against well-funded competitors.",
-    work: "Proposed and analysed the shift from B2C to B2B2C: offering the platform to mutual fund distributors for a fixed fee. I compared competitor products and modelled cost against revenue. Separately, I ran a multi-state incorporation analysis for IKSHANA Z INC.",
+    work: "Proposed and analysed the shift from B2C to B2B2C: offering the platform to mutual fund distributors for a fixed fee. I compared competitor products and modelled cost against revenue.",
     result: { big: "B2C → B2B2C", label: "the shift I proposed and analysed" },
-    extra: "IKSHANA Z INC adopted my Delaware recommendation.",
     tools: ["Competitor teardown", "Unit economics", "Cost vs revenue model", "Memo"],
     wiring: {
       pipeline: ["Competitors", "Cost model", "Revenue model", "Scenarios", "Recommendation"],
@@ -128,6 +132,7 @@ WINDOW w AS (ORDER BY stage_order);`,
   fuel: {
     id: "fuel", no: "05", part: "Fuel tank", area: "Finance", hover: "Fuel · finance",
     title: "Money in the tank",
+    did: ["Researched the MVP setup with the founder", "Built the fund recommendation engine in 2–3 days", "Exchange, KYC flow and APIs chosen"],
     where: "Rabbit Invest · the B2C app's first year",
     complaint: "A fund platform needs a reason for investors to put money in, from day one.",
     work: "Researched the MVP setup with the founder (exchange choice, KYC flow, paid API integrations) and built the mutual fund recommendation engine in Google Sheets and Apps Script in two to three days.",
@@ -149,6 +154,7 @@ return weights(picks, profile.horizon);`,
   nav: {
     id: "nav", no: "06", part: "Navigation", area: "AI products", hover: "Navigation · AI you can inspect",
     title: "BoardIQ: an AI that shows its route",
+    did: ["Starts from the decision you need to make", "Checks if your data can be trusted first", "Gives a verdict with its full reasoning"],
     where: "AI in Business capstone · Masters' Union",
     complaint: "Investors are asked to trust AI verdicts they can't inspect.",
     work: "Built BoardIQ end to end: it starts from the decision, says what data it needs, checks whether that data can be trusted, then gives a verdict with its full reasoning chain and a board memo.",
@@ -170,6 +176,7 @@ return weights(picks, profile.horizon);`,
   cluster: {
     id: "cluster", no: "07", part: "Gauges", area: "Where the data habit started", hover: "Gauges · reporting",
     title: "Gauges that change the next decision",
+    did: ["Myntra: funnel analysis built from scratch", "Wipro: rebuilt Zoho CRM reporting", "Wipro: acquisition and retention analysis"],
     where: "Myntra · Data Analyst Intern, 2022 · Wipro · Project Engineer, 2022–2024",
     complaint: "Marketing spend moved faster than the team's view of where customers dropped out. Later, at Wipro, 100+ SMB accounts had no clear funnel signal.",
     work: "At Myntra I built a conversion-funnel analysis from scratch linking behaviour to channel performance. At Wipro I rebuilt Zoho CRM reporting and the acquisition and retention analysis.",
@@ -205,6 +212,8 @@ export const PROPS: PropInfo[] = [
   { id: "clipboard", label: "Clipboard", hint: "The spec sheet · plain résumé view" },
   { id: "powerbox", label: "Power box", hint: "Lift the bonnet: see the data wiring" },
   { id: "scanner", label: "Diagnostic scanner", hint: "Run a diagnostic on your company" },
+  { id: "journey", label: "Road map", hint: "My career journey, stop by stop" },
+  { id: "exit", label: "Garage door", hint: "Out to the test track: drive the buggy" },
 ];
 
 /** Diagnostic: the visitor's symptom → the part I'd look at first. */

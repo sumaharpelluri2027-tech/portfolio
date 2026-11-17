@@ -7,7 +7,7 @@ export const KINDS: { id: Kind | "all"; label: string; blurb: string }[] = [
   { id: "case", label: "Case competitions", blurb: "National and campus competitions at Masters' Union." },
   { id: "course", label: "MU course projects", blurb: "Team projects from the PGP-TBM curriculum." },
   { id: "proto", label: "Prototypes", blurb: "Ventures and builds still in progress." },
-  { id: "lead", label: "Leadership", blurb: "Running the AI & Analytics Wing and campaigns." },
+  { id: "lead", label: "Leadership", blurb: "Running the AI & Analytics Wing." },
 ];
 
 export interface Project {
@@ -84,16 +84,10 @@ export const PROJECTS: Project[] = [
     what: "Exploratory analysis of a SaaS startup dataset.", mine: "Ran the analysis and wrote it up as a consulting-style executive summary." },
   { id: "insurance", title: "AI Insurance Claim Assistant", kind: "course", status: "Completed", where: "MU · group assignment",
     what: "Claims-processing automation in Make.com, with a sector map of Indian insurtech.", mine: "Built the automation." },
-  { id: "ikshana", title: "IKSHANA Z INC", kind: "course", status: "Adopted by client", hot: true, where: "Incorporation analysis",
-    what: "A multi-state incorporation analysis on tax and permits.", mine: "The client adopted my Delaware recommendation." },
 
   // ---------- prototypes ----------
-  { id: "priya", title: "Priya · AI voice agent", kind: "proto", status: "In build", where: "Side build",
-    what: "A two-way call agent for a dropshipping business, on Bolna with a Fish Audio cloned voice.", mine: "Designing it with the human handoff first." },
   { id: "snip", title: "Snip", kind: "proto", status: "Prototype", where: "Venture",
     what: "A marketplace and CRM connecting people with tailors, boutiques and designers across India.", mine: "Built the first prototype on Lovable." },
-  { id: "brew", title: "Brew Home", kind: "proto", status: "Prototype", where: "Side build",
-    what: "A specialty Indian coffee storefront with a flavour quiz that recommends a roast, plus subscriptions.", mine: "Product and build.", img: "img/brewhome.webp" },
 
   // ---------- leadership ----------
   { id: "wing", title: "VP, AI & Analytics Wing", kind: "lead", status: "Elected", hot: true, where: "Masters' Union",
@@ -101,8 +95,6 @@ export const PROJECTS: Project[] = [
     mine: "Ran the event \"Turning Business Challenges into AI Opportunities\" with a QR feedback system, and built the core-team recruitment workbook.", img: "img/aiaw-event.webp" },
   { id: "film", title: "The campaign film", kind: "lead", status: "AI film", where: "Wing election",
     what: "My first AI film, made with Google Flow: the campaign that got me elected VP of the Wing.", mine: "Wrote and generated it.", href: LINKS.film, cta: "Watch on YouTube" },
-  { id: "campaigns", title: "FOCOS & Google Fraternity campaigns", kind: "lead", status: "Campaigns", where: "Masters' Union",
-    what: "Campaigns for FOCOS Club President and Google Fraternity President.", mine: "Wrote the scripts, decks and campaign material." },
 ];
 
 export const count = (k: Kind | "all") => (k === "all" ? PROJECTS.length : PROJECTS.filter((p) => p.kind === k).length);

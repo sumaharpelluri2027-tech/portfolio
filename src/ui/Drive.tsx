@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, LayoutGrid, Music2, RotateCcw, VolumeX } from "lucide-react";
 import { createTrack, type GateId, type GateSpec, type Telemetry, type TrackAPI } from "../scene/track";
 import { createBuggy } from "../scene/buggyEntry";
+import { createMusic } from "../scene/music";
 import { JOBS, type CarPart } from "../content";
 import { A } from "../data";
 import { TRAITS, traitFor, type Trait } from "../traits";
@@ -18,14 +19,13 @@ const LABEL: Record<GateId, [string, string]> = {
 const ORDER: GateId[] = ["steering", "accelerator", "engine", "fuel", "brakes", "nav", "projects", "pit"];
 const GATES: GateSpec[] = ORDER.map((id) => ({ id, label: LABEL[id][0], sub: LABEL[id][1], color: traitFor(id)?.color ?? "#f2b705" }));
 const isPart = (g: GateId | null): g is GateId & CarPart => !!g && g in JOBS;
-const fmt = (s: number | null) => (s == null ? "--:--.-" : `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`);
 const AUTO = 9; // seconds before a reward card lets you drive on by itself
 
 /** The test track: each gate unlocks one thing I bring to a team; the pit is where you hire the driver. */
 export default function Drive({ onExit }: { onExit: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<TrackAPI | null>(null);
-  const music = useRef<HTMLAudioElement>(null);
+  const music = useRef(createMusic());
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [sound, setSound] = useState(true);
@@ -34,9 +34,10 @@ export default function Drive({ onExit }: { onExit: () => void }) {
   const [detail, setDetail] = useState<GateId | null>(null);
   const [board, setBoard] = useState(false);
   const [ask, setAsk] = useState<{ q?: string; n: number } | null>(null);
-  const [award, setAward] = useState<string | null | undefined>(undefined);
+  const [award, setAward] = useState<null | undefined>(undefined);
   const [toast, setToast] = useState<string | null>(null);
   const [got, setGot] = useState<GateId[]>([]);
+  const [finale, setFinale] = useState(false);
   const telRef = useRef<Telemetry | null>(null);
   const finished = useRef(false);
   const coarse = useRef(typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches);
@@ -50,14 +51,13 @@ export default function Drive({ onExit }: { onExit: () => void }) {
       if (left > 0) { flash(`${left} more ${left === 1 ? "trait" : "traits"} to collect before the pit`); return; }
       if (finished.current) return;
       finished.current = true;
-      api.current?.celebrate();
-      const lap = fmt(t?.lapTime ?? null);
-      window.setTimeout(() => { api.current?.setPaused(true); setAward(lap); }, 2600);
+      api.current?.celebrate(); music.current.sting("finish"); setFinale(true);
+      window.setTimeout(() => { setFinale(false); api.current?.setPaused(true); setAward(null); }, 3200);
       return;
     }
     const tr = traitFor(id); if (!tr) return;
     api.current?.setPaused(true);
-    setGot((g) => (g.includes(id) ? g : [...g, id]));
+    setGot((g) => { const n = g.includes(id) ? g : [...g, id]; music.current.sting(n.length >= 7 ? "all" : "gate"); return n; });
     setReward(tr);
   }, []);
   const onGateRef = useRef(onGate); onGateRef.current = onGate;
@@ -73,13 +73,13 @@ export default function Drive({ onExit }: { onExit: () => void }) {
     });
     api.current = t;
     t.setPaused(true);
-    return () => { t.dispose(); api.current = null; music.current?.pause(); };
+    const m = music.current;
+    return () => { t.dispose(); api.current = null; m.dispose(); };
   }, []);
 
   const applySound = (on: boolean) => {
     setSound(on); api.current?.setSound(on);
-    const m = music.current; if (!m) return;
-    if (on) { m.volume = 0.32; m.play().catch(() => {}); } else m.pause();
+    music.current.setOn(on); if (on) music.current.start();
   };
   const start = () => { setStarted(true); applySound(sound); api.current?.setPaused(false); };
   const resume = useCallback(() => { setReward(null); setDetail(null); setBoard(false); setAsk(null); api.current?.setPaused(false); }, []);
@@ -104,7 +104,6 @@ export default function Drive({ onExit }: { onExit: () => void }) {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#1a1030]">
-      <audio ref={music} src={A("audio/chasing-the-horizon.mp3")} loop preload="none" />
       <div ref={host} className="absolute inset-0" role="application" aria-label="A drivable test track. Each gate unlocks one thing I bring to a team. Use Skip to the work for a non-driving view." />
 
       {/* top bar */}
@@ -122,7 +121,8 @@ export default function Drive({ onExit }: { onExit: () => void }) {
             <img src={A("me/avatar.webp")} alt="" className="h-10 w-10 rounded-full object-cover ring-2 ring-hazard" />
             <div className="min-w-0"><div className="font-cond text-[16px] font-semibold leading-tight">Driver: Sumahar Pelluri</div><div className="truncate text-[11.5px] text-paper/60">Founder's Office · Data · Ops · PGP '27</div></div>
           </div>
-          <div className="mt-2.5 flex items-center justify-between font-mono text-[10px] tracking-[0.15em] text-paper/60"><span>TRAITS COLLECTED</span><span className="text-hazard">{got.length}/7</span></div>
+          <div className="mt-2.5 flex items-center justify-between font-mono text-[10px] tracking-[0.15em] text-paper/60"><span>HOW WELL YOU KNOW ME</span><motion.span key={got.length} initial={{ scale: 1.6, color: "#fff" }} animate={{ scale: 1, color: "#f2b705" }} className="font-bold">{Math.round((got.length / 7) * 100)}%</motion.span></div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/10"><motion.div className="h-full rounded-full bg-gradient-to-r from-[#4fc3f7] via-[#f2b705] to-[#66bb6a]" animate={{ width: `${(got.length / 7) * 100}%` }} transition={{ type: "spring", stiffness: 80, damping: 14 }} /></div>
           <div className="mt-1.5 grid grid-cols-7 gap-1">
             {TRAITS.map((t) => {
               const on = got.includes(t.gate);
@@ -148,7 +148,6 @@ export default function Drive({ onExit }: { onExit: () => void }) {
       {ready && started && (
         <div className="pointer-events-none absolute bottom-[112px] right-4 z-10 rounded-xl md:bottom-auto md:top-[74px] border border-white/15 bg-black/50 px-3 py-2 text-right font-mono backdrop-blur md:right-7" aria-hidden="true">
           <div><span className="font-stencil text-[28px] leading-none tabular-nums">{Math.round(tel?.speedKmh ?? 0)}</span><span className="ml-1 text-[10px] text-paper/60">KM/H</span></div>
-          <div className="text-[10.5px] tabular-nums text-paper/60">LAP {fmt(tel?.lapTime ?? 0)}</div>
         </div>
       )}
 
@@ -189,7 +188,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
               className="w-full max-w-[460px] rounded-2xl border-2 border-hazard bg-oil/95 p-6 text-center shadow-[0_0_60px_rgba(242,183,5,.3)]">
               <img src={A("me/avatar.webp")} alt="" className="mx-auto h-16 w-16 rounded-full object-cover ring-4 ring-hazard" />
               <h2 className="mt-3 font-stencil text-[34px] leading-none">TEST-DRIVE ME</h2>
-              <p className="mt-2 text-[15px] text-paper/80">Drive through <b className="text-paper">7 coloured gates</b>. Each one unlocks something I'd bring to your team. Finish in the pit for your reward.</p>
+              <p className="mt-2 text-[15px] text-paper/80">No timer, no racing. Drive through <b className="text-paper">7 coloured gates</b> and get to know me: each one unlocks something I'd bring to your team. Fill the meter to 100% and finish in the pit.</p>
               <div className="mt-4 flex justify-center gap-1.5">{TRAITS.map((t) => <span key={t.gate} className="grid h-9 w-9 place-items-center rounded-lg text-[17px]" style={{ background: t.color + "33", border: `1px solid ${t.color}` }}>{t.emoji}</span>)}</div>
               <div className="mt-4 font-mono text-[11px] text-paper/60">{coarse.current ? "Use the on-screen GAS and arrows" : "W A S D or arrow keys to drive"}</div>
               <button type="button" onClick={start} className="mt-4 inline-flex items-center gap-2 rounded-full bg-hazard px-7 py-3 font-mono text-[13px] font-bold tracking-wider text-ink hover:brightness-110">START ENGINE <ArrowRight size={16} /></button>
@@ -210,7 +209,16 @@ export default function Drive({ onExit }: { onExit: () => void }) {
       <Sheet open={isPart(detail)} onClose={resume} label="The full story">{isPart(detail) && <JobCardView id={detail} onBonnet={resume} />}</Sheet>
       <AnimatePresence>{board && <Projects onClose={resume} onAsk={(q) => { setBoard(false); setAsk({ q, n: Date.now() }); }} />}</AnimatePresence>
       <Sheet open={!!ask} onClose={resume} label="Ask Sumahar" tone="dark">{ask && <Bot key={ask.n} initialQuestion={ask.q} />}</Sheet>
-      <AnimatePresence>{award !== undefined && <Achievement how="track" lap={award} onClose={() => { setAward(undefined); api.current?.setPaused(false); }} />}</AnimatePresence>
+      <AnimatePresence>{finale && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none absolute inset-0 z-30 grid place-items-center">
+          <motion.div initial={{ scale: 2.4, rotate: -12, opacity: 0 }} animate={{ scale: 1, rotate: -6, opacity: 1 }} transition={{ type: "spring", stiffness: 220, damping: 12, delay: 0.3 }}
+            className="rounded-2xl border-[6px] border-hazard bg-black/70 px-8 py-5 text-center shadow-[0_0_80px_rgba(242,183,5,.6)] backdrop-blur">
+            <div className="font-stencil text-[clamp(44px,8vw,88px)] leading-none text-hazard">100% MATCH</div>
+            <div className="mt-1 font-mono text-[12px] tracking-[0.3em] text-paper">YOU KNOW THE DRIVER NOW</div>
+          </motion.div>
+        </motion.div>
+      )}</AnimatePresence>
+      <AnimatePresence>{award !== undefined && <Achievement how="track" onClose={() => { setAward(undefined); api.current?.setPaused(false); }} />}</AnimatePresence>
       <AnimatePresence>{toast && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute left-1/2 top-[132px] z-30 -translate-x-1/2 whitespace-nowrap rounded-full bg-paper px-4 py-2 font-mono text-[11px] text-ink">{toast}</motion.div>}</AnimatePresence>
     </div>
   );
@@ -224,6 +232,7 @@ function RewardCard({ t, n, onGo, onMore }: { t: Trait; n: number; onGo: () => v
     <motion.div role="dialog" aria-label={`Trait unlocked: ${t.trait}`} className="absolute inset-0 z-30 grid place-items-center p-4"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="absolute inset-0 bg-black/35" onClick={onGo} />
+      <motion.div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle, ${t.color}88, transparent 70%)` }} initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ duration: 0.9 }} />
       <motion.div onPointerEnter={() => setHold(true)} onPointerDown={() => setHold(true)}
         initial={{ scale: 0.7, y: 30, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} transition={{ type: "spring", stiffness: 260, damping: 20 }}
         className="relative w-full max-w-[420px] overflow-hidden rounded-3xl bg-oil text-center shadow-2xl" style={{ boxShadow: `0 0 0 2px ${t.color}, 0 0 70px ${t.color}66` }}>
@@ -241,7 +250,12 @@ function RewardCard({ t, n, onGo, onMore }: { t: Trait; n: number; onGo: () => v
             <div className="mt-1 text-[13px] text-paper/65">{t.statLabel}</div>
           </motion.div>
           <p className="mx-auto mt-3 max-w-[330px] text-[15px] leading-snug text-paper/85">{t.line}</p>
-          <div className="mt-3 flex justify-center gap-1.5">{t.chips.map((c) => <span key={c} className="rounded-full bg-white/[.08] px-2.5 py-1 font-mono text-[10.5px] text-paper/75">{c}</span>)}</div>
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mx-auto mt-3 max-w-[340px] rounded-xl px-3 py-2 text-[13.5px] leading-snug" style={{ background: t.color + "22", border: `1px solid ${t.color}66` }}>💡 {t.aha}</motion.div>
+          <div className="mx-auto mt-4 max-w-[300px]">
+            <div className="flex justify-between font-mono text-[10px] tracking-[0.15em] text-paper/60"><span>YOU NOW KNOW ME</span><span style={{ color: t.color }}>+14%</span></div>
+            <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-white/10"><motion.div className="h-full rounded-full" style={{ background: t.color }} initial={{ width: `${((n - 1) / 7) * 100}%` }} animate={{ width: `${(n / 7) * 100}%` }} transition={{ delay: 0.5, duration: 0.9, ease: "easeOut" }} /></div>
+            <div className="mt-1 text-right font-stencil text-[18px]" style={{ color: t.color }}>{Math.round((n / 7) * 100)}%</div>
+          </div>
           {last && <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6 }} className="mt-4 rounded-xl bg-hazard px-3 py-2 font-mono text-[11.5px] font-bold text-ink">🏁 ALL 7 COLLECTED · HEAD TO THE PIT FOR YOUR REWARD</motion.div>}
         </div>
         <div className="flex items-center gap-2 border-t border-white/10 p-3">

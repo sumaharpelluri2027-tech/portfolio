@@ -2,7 +2,6 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass.js";
@@ -27,6 +26,8 @@ export interface GarageOptions {
   onHover: (id: StationId | null) => void;
   onSelect: (id: StationId) => void;
   onReady: () => void;
+  /** the visitor dragged away from a focused object */
+  onFree?: () => void;
   onProgress?: (p: number) => void;
   quality?: "high" | "low";
 }
@@ -34,6 +35,8 @@ export interface GarageOptions {
 export type ZoneId = "car" | "bench" | "wall" | "shelf" | "board";
 export interface GarageAPI {
   focus(id: StationId | null): void;
+  /** turn the view by a quarter (±1) */
+  turn(dir: number): void;
   goZone(z: ZoneId): void;
   setXray(on: boolean): void;
   bindLabel(id: string, el: HTMLElement | null): void;
@@ -44,10 +47,13 @@ export interface GarageAPI {
 type Station = { id: StationId; object: THREE.Object3D; anchor: THREE.Vector3; view?: { pos: THREE.Vector3; target: THREE.Vector3 } };
 
 /* ------------------------------------------------------------------ helpers */
+const REDRAW: (() => void)[] = [];
 function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void, srgb = true) {
   const c = document.createElement("canvas"); c.width = w; c.height = h;
-  draw(c.getContext("2d")!);
+  const g = c.getContext("2d")!;
+  draw(g);
   const t = new THREE.CanvasTexture(c);
+  REDRAW.push(() => { g.clearRect(0, 0, w, h); draw(g); t.needsUpdate = true; });
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
   return t;
@@ -89,22 +95,20 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   scene.background = BG.clone();
   scene.fog = new THREE.Fog(0x0c0b0a, 9, 22);
 
-  const camera = new THREE.PerspectiveCamera(42, W() / H(), 0.05, 60);
+  const camera = new THREE.PerspectiveCamera(46, W() / H(), 0.05, 80);
   const narrow = () => W() / H() < 0.85;
-  const HOME = () => narrow()
-    ? { pos: new THREE.Vector3(3.6, 2.5, 6.6), target: new THREE.Vector3(-0.2, 0.85, -0.6) }
-    : { pos: new THREE.Vector3(3.9, 2.05, 4.7), target: new THREE.Vector3(-0.55, 0.95, -0.9) };
-  camera.position.set(7.5, 3.4, 10.5);
-  camera.lookAt(HOME().target);
-
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true; controls.dampingFactor = 0.06;
-  controls.enablePan = false; controls.minDistance = 2.2; controls.maxDistance = 10;
-  controls.minPolarAngle = 0.75; controls.maxPolarAngle = 1.5;
-  controls.minAzimuthAngle = -1.1; controls.maxAzimuthAngle = 1.35;
-  controls.target.copy(HOME().target);
-  controls.rotateSpeed = 0.6; controls.zoomSpeed = 0.7;
-  controls.enabled = false;
+  /* You stand in the middle of the garage and look around: hover to glance, push to the edge or drag to turn all the way round. */
+  const EYE = () => (narrow() ? new THREE.Vector3(0.5, 1.8, 5.2) : new THREE.Vector3(0.6, 1.78, 3.7));
+  const CAR = new THREE.Vector3(-0.3, 0.85, -0.7);
+  const yawTo = (eye: THREE.Vector3, t: THREE.Vector3) => Math.atan2(-(t.x - eye.x), -(t.z - eye.z));
+  const look = { base: 0, yaw: 0, pitch: -0.14, hoverYaw: 0, hoverPitch: 0, fov: 46 };
+  look.base = look.yaw = yawTo(EYE(), CAR);
+  const dirOf = (yaw: number, pitch: number) => new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+  const lookPose = () => { const e = EYE(); return { pos: e, target: e.clone().add(dirOf(look.base, look.pitch).multiplyScalar(4)) }; };
+  const HOME = () => { look.base = yawTo(EYE(), CAR); return lookPose(); };
+  const target = new THREE.Vector3().copy(HOME().target);
+  camera.position.set(0.6, 2.3, 11.5);
+  camera.lookAt(target);
 
   /* ---------- lights ---------- */
   const hemi = new THREE.HemisphereLight(0x8fa6c0, 0x1a140e, 0.0);
@@ -160,6 +164,59 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   right.rotation.y = -Math.PI / 2; right.position.set(6.4, 2.6, 1.5); right.receiveShadow = true; room.add(right);
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(16, 12), new THREE.MeshStandardMaterial({ color: 0x141312, roughness: 1 }));
   ceil.rotation.x = Math.PI / 2; ceil.position.set(0, 5.2, 1.5); room.add(ceil);
+  /* front wall: an open roller door looking out onto the test track at sunset */
+  const DOOR = { x: 0.6, w: 5.0, h: 3.7, z: 7.4 };
+  const frontMat = wallMat.clone();
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(6.4 + DOOR.x - DOOR.w / 2, 5.2), frontMat);
+  fl.rotation.y = Math.PI; fl.position.set((-6.4 + DOOR.x - DOOR.w / 2) / 2, 2.6, DOOR.z); room.add(fl);
+  const fr = new THREE.Mesh(new THREE.PlaneGeometry(6.4 - DOOR.x - DOOR.w / 2, 5.2), frontMat);
+  fr.rotation.y = Math.PI; fr.position.set((6.4 + DOOR.x + DOOR.w / 2) / 2, 2.6, DOOR.z); room.add(fr);
+  const ft = new THREE.Mesh(new THREE.PlaneGeometry(DOOR.w, 5.2 - DOOR.h), frontMat);
+  ft.rotation.y = Math.PI; ft.position.set(DOOR.x, DOOR.h + (5.2 - DOOR.h) / 2, DOOR.z); room.add(ft);
+  const doorFrameMat = new THREE.MeshStandardMaterial({ color: 0x2a2724, metalness: 0.6, roughness: 0.5 });
+  for (const sx of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, DOOR.h, 0.22), doorFrameMat); post.position.set(DOOR.x + sx * DOOR.w / 2, DOOR.h / 2, DOOR.z); room.add(post); }
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, DOOR.w, 24), new THREE.MeshStandardMaterial({ color: 0x8d9298, metalness: 0.8, roughness: 0.45 }));
+  drum.rotation.z = Math.PI / 2; drum.position.set(DOOR.x, DOOR.h + 0.05, DOOR.z - 0.25); room.add(drum);
+  const slatMat = new THREE.MeshStandardMaterial({ color: 0xa7acb2, metalness: 0.7, roughness: 0.5 });
+  for (let i = 0; i < 3; i++) { const sl = new THREE.Mesh(new THREE.BoxGeometry(DOOR.w - 0.1, 0.16, 0.04), slatMat); sl.position.set(DOOR.x, DOOR.h - 0.12 - i * 0.17, DOOR.z - 0.05); room.add(sl); }
+  const hz = new THREE.Mesh(new THREE.PlaneGeometry(DOOR.w, 0.5), new THREE.MeshStandardMaterial({ color: 0xe8b400, roughness: 0.8 }));
+  hz.rotation.x = -Math.PI / 2; hz.position.set(DOOR.x, 0.006, DOOR.z - 0.3); room.add(hz);
+  // outside: sunset sky, hills and the track arch, unaffected by the garage fog
+  const skyTex = canvasTex(2048, 1024, (g) => {
+    const gr = g.createLinearGradient(0, 0, 0, 1024);
+    gr.addColorStop(0, "#2b1055"); gr.addColorStop(0.42, "#d6457a"); gr.addColorStop(0.62, "#ff9a4d"); gr.addColorStop(0.7, "#ffd27a"); gr.addColorStop(1, "#ffb067");
+    g.fillStyle = gr; g.fillRect(0, 0, 2048, 1024);
+    g.fillStyle = "#fff1b8"; g.beginPath(); g.arc(1150, 690, 120, 0, Math.PI * 2); g.fill();
+    for (let i = 0; i < 6; i++) { g.fillStyle = `rgba(43,16,85,${0.35})`; g.fillRect(1030, 650 + i * 26, 240, 6 + i * 2); }
+    const hill = (c: string, base: number, amp: number, f: number) => { g.fillStyle = c; g.beginPath(); g.moveTo(0, 1024); for (let x = 0; x <= 2048; x += 16) g.lineTo(x, base - Math.sin(x * f) * amp - Math.sin(x * f * 2.7 + 1) * amp * 0.4); g.lineTo(2048, 1024); g.fill(); };
+    hill("#7a2f6b", 760, 60, 0.004); hill("#4a1d4f", 810, 45, 0.007); hill("#26103a", 860, 28, 0.011);
+    // track arch
+    g.fillStyle = "#15101c"; g.fillRect(830, 740, 14, 130); g.fillRect(1206, 740, 14, 130); g.fillRect(820, 712, 410, 46);
+    g.fillStyle = "#f2b705"; g.font = `36px ${STENCIL}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("SUMAHAR TEST TRACK", 1025, 737);
+    for (let i = 0; i < 12; i++) { g.fillStyle = i % 2 ? "#f4f1e8" : "#15101c"; g.fillRect(820 + i * 34.2, 758, 34.2, 8); }
+  });
+  const sky = new THREE.Mesh(new THREE.PlaneGeometry(84, 42), new THREE.MeshBasicMaterial({ map: skyTex, fog: false }));
+  sky.position.set(DOOR.x, 9.5, 46); sky.rotation.y = Math.PI; room.add(sky);
+  const roadTex = canvasTex(512, 1024, (g) => {
+    g.fillStyle = "#3a2a2e"; g.fillRect(0, 0, 512, 1024); g.fillStyle = "#4b6b3a"; g.fillRect(0, 0, 130, 1024); g.fillRect(382, 0, 130, 1024);
+    for (let y = 0; y < 1024; y += 64) { g.fillStyle = (y / 64) % 2 ? "#e23b3b" : "#f4f1e8"; g.fillRect(130, y, 16, 64); g.fillRect(366, y, 16, 64); }
+    g.fillStyle = "#f2b705"; for (let y = 20; y < 1024; y += 128) g.fillRect(250, y, 12, 64);
+  });
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(26, 40), new THREE.MeshBasicMaterial({ map: roadTex, fog: false, color: 0xd9b8a8 }));
+  road.rotation.x = -Math.PI / 2; road.position.set(DOOR.x, -0.01, DOOR.z + 20); room.add(road);
+  const spill = new THREE.PointLight(0xff8a50, 6, 8, 1.6); spill.position.set(DOOR.x, 2.4, DOOR.z - 0.6); scene.add(spill);
+  // neon sign over the door: the way out to the drive
+  const neonTex = canvasTex(1024, 256, (g) => {
+    g.fillStyle = "rgba(0,0,0,0)"; g.clearRect(0, 0, 1024, 256);
+    g.shadowColor = "#ff7a1a"; g.shadowBlur = 30; g.strokeStyle = "#ffb15c"; g.lineWidth = 8; g.strokeRect(14, 14, 996, 228);
+    g.fillStyle = "#ffe2b0"; g.font = `120px ${STENCIL}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("TEST TRACK  →", 512, 136);
+  });
+  const neon = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), new THREE.MeshBasicMaterial({ map: neonTex, transparent: true, fog: false, toneMapped: false }));
+  neon.rotation.y = Math.PI; neon.position.set(DOOR.x + DOOR.w / 2 + 1.55, 2.25, DOOR.z - 0.05);
+  const exitHit = new THREE.Mesh(new THREE.PlaneGeometry(DOOR.w, DOOR.h), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+  exitHit.rotation.y = Math.PI; exitHit.position.set(DOOR.x, DOOR.h / 2, DOOR.z + 0.02);
+  const exitG = new THREE.Group(); exitG.add(neon, exitHit); room.add(exitG);
+
   // painted skirting band
   const band = new THREE.Mesh(new THREE.PlaneGeometry(16, 0.9), new THREE.MeshStandardMaterial({ color: 0x23302b, roughness: 0.85 }));
   band.position.set(0, 0.45, -4.29); room.add(band);
@@ -278,7 +335,33 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   }
 
   const ready = (async () => {
-    if (document.fonts?.load) { try { await Promise.all([document.fonts.load(`80px ${STENCIL}`), document.fonts.load(`40px ${MONO}`)]); } catch { /* ignore */ } }
+    if (document.fonts?.load) { try { await Promise.all([document.fonts.load(`80px ${STENCIL}`), document.fonts.load(`40px ${MONO}`)]); REDRAW.splice(0).forEach((r) => r()); } catch { /* ignore */ } }
+    // career road map on the front wall, left of the door
+    const mapTex = canvasTex(1600, 900, (g) => {
+      g.fillStyle = "#efe7d4"; g.fillRect(0, 0, 1600, 900);
+      g.strokeStyle = "rgba(0,0,0,.06)"; g.lineWidth = 2; for (let x = 0; x < 1600; x += 80) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 900); g.stroke(); } for (let y = 0; y < 900; y += 80) { g.beginPath(); g.moveTo(0, y); g.lineTo(1600, y); g.stroke(); }
+      g.fillStyle = "#15120f"; g.font = `76px ${STENCIL}`; g.textAlign = "left"; g.textBaseline = "alphabetic"; g.fillText("THE ROAD SO FAR", 60, 110);
+      g.font = `500 28px ${MONO}`; g.fillStyle = "#6b5f4e"; g.fillText("ENGINEER → ANALYST → OPERATOR → BUILDER", 64, 158);
+      const P: [number, number, string, string, string][] = [[150, 700, "VIT", "B.TECH · → 2022", "#2a5fb8"], [430, 470, "MYNTRA", "INTERN · 2022", "#e0457b"], [720, 640, "WIPRO", "2022 – 2024", "#5b3fa0"], [1010, 400, "RABBIT INVEST", "2024 – 2026", "#1f9d6b"], [1300, 560, "MASTERS' UNION", "NOW · '27", "#d98e04"]];
+      g.lineCap = "round"; g.lineJoin = "round";
+      const path = () => { g.beginPath(); g.moveTo(P[0][0], P[0][1]); for (let i = 1; i < P.length; i++) { const [x0, y0] = P[i - 1], [x1, y1] = P[i]; g.bezierCurveTo((x0 + x1) / 2, y0, (x0 + x1) / 2, y1, x1, y1); } g.lineTo(1530, 300); };
+      g.strokeStyle = "#2d2925"; g.lineWidth = 46; path(); g.stroke();
+      g.strokeStyle = "#f2b705"; g.lineWidth = 5; g.setLineDash([26, 22]); path(); g.stroke(); g.setLineDash([]);
+      P.forEach(([x, y, t, d, c], i) => {
+        g.fillStyle = c; g.beginPath(); g.arc(x, y - 58, 30, Math.PI * 0.15, Math.PI * 0.85, true); g.lineTo(x, y - 6); g.closePath(); g.fill();
+        g.fillStyle = "#fff"; g.font = `34px ${STENCIL}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String(i + 1), x, y - 62);
+        const up = i % 2 === 1; const ty = up ? y - 130 : y + 60;
+        g.fillStyle = "#15120f"; g.font = `42px ${STENCIL}`; g.fillText(t, x, ty); g.font = `500 24px ${MONO}`; g.fillStyle = "#6b5f4e"; g.fillText(d, x, ty + 36);
+      });
+      g.fillStyle = "#d63a2f"; g.font = `40px ${STENCIL}`; g.textAlign = "right"; g.fillText("NEXT: YOUR TEAM →", 1560, 260);
+    });
+    const mapG = new THREE.Group();
+    const mapFrame = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.75, 0.05), new THREE.MeshStandardMaterial({ color: 0x2b2017, roughness: 0.7 }));
+    const mapFace = new THREE.Mesh(new THREE.PlaneGeometry(2.88, 1.62), new THREE.MeshStandardMaterial({ map: mapTex, roughness: 0.75, emissive: 0xffffff, emissiveMap: mapTex, emissiveIntensity: 0.12 })); mapFace.position.z = 0.03;
+    mapG.add(mapFrame, mapFace); mapG.rotation.y = Math.PI; mapG.position.set(-4.0, 2.05, DOOR.z - 0.04); props.add(mapG);
+    const mapLight = new THREE.SpotLight(0xfff1d6, 7, 6, 0.6, 0.6, 1.5); mapLight.position.set(-4.0, 4.2, DOOR.z - 1.6); mapLight.target = mapG; scene.add(mapLight);
+    addStation("journey", mapG, { pos: [-4.0, 2.0, DOOR.z - 3.3], target: [-4.0, 2.0, DOOR.z + 2] });
+    addStation("exit", exitG, { pos: [DOOR.x, 1.8, DOOR.z - 3.2], target: [DOOR.x, 2.0, DOOR.z + 6] });
     const names = ["metal_tool_chest", "boombox", "hanging_industrial_lamp", "steel_frame_shelves_01", "classic_laptop", "clipboard", "old_tyre", "metal_jerrycan", "oil_tin", "metal_stool_01", "ratchet_wrench", "adjustable_wrench", "cardboard_box_01", "korean_fire_extinguisher_01", "power_box_01", "industrial_storage_cart", "mounted_fluorescent_lights"];
     const M: Record<string, THREE.Group> = {};
     await Promise.all(names.map(async (n) => { M[n] = await load(n); }));
@@ -403,15 +486,45 @@ export function createGarage(opt: GarageOptions): GarageAPI {
       ray.set(new THREE.Vector3((shelfB.min.x + shelfB.max.x) / 2, yy, -3.6), new THREE.Vector3(0, -1, 0));
       const h = ray.intersectObject(shelf, true)[0]; if (h && !levels.some((l) => Math.abs(l - h.point.y) < 0.15)) levels.push(h.point.y);
     }
-    const L = levels.length ? levels : [0.75, 1.2, 1.65];
-    let k = 0;
-    for (const y of L.slice(-3)) for (const x of sx) {
-      if (k++ % 2) { const t = trophy(0.22 + Math.random() * 0.12); t.position.set(x, y, -3.6); tro.add(t); }
-      else { const p = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.28, 0.03), gold); p.position.set(x, y + 0.14, -3.65); p.rotation.x = -0.12; p.castShadow = true; tro.add(p); }
-    }
+    const L = (levels.length ? levels : [0.75, 1.2, 1.65]).slice(-3);
+    // real wins, each with its own plaque
+    const WINS: [string, string, "cup" | "medal" | "plaque"][] = [
+      ["BAJA SAE INDIA", "ALL INDIA RANK 8", "cup"], ["DEADLIFT", "1ST PLACE", "medal"], ["THE KEN · CASE", "ROUND 2", "cup"],
+      ["CASE UNION 4.0", "4 SHORTLISTED", "plaque"], ["DECCO STORE", "₹3L IN 30 DAYS", "plaque"], ["AI & ANALYTICS", "VICE PRESIDENT", "cup"],
+    ];
+    const silver = new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 1, roughness: 0.2 });
+    const ribbon = new THREE.MeshStandardMaterial({ color: 0xc8202a, roughness: 0.7 });
+    const plaque = (a: string, b: string, w = 0.26, h = 0.1) => {
+      const t = canvasTex(512, Math.round(512 * h / w), (g) => {
+        g.fillStyle = "#1b140e"; g.fillRect(0, 0, 512, 512); g.strokeStyle = "#d9a63a"; g.lineWidth = 6; g.strokeRect(6, 6, 500, Math.round(512 * h / w) - 12);
+        g.fillStyle = "#f2c94c"; g.textAlign = "center"; g.textBaseline = "middle";
+        const H = Math.round(512 * h / w);
+        g.font = `600 ${Math.round(H * 0.3)}px ${MONO}`; g.fillText(a, 256, H * 0.34);
+        g.font = `${Math.round(H * 0.36)}px ${STENCIL}`; g.fillStyle = "#fff4d6"; g.fillText(b, 256, H * 0.72);
+      });
+      return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, roughness: 0.5, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.18 }));
+    };
+    WINS.forEach(([a, b2, kind], i) => {
+      const y = L[Math.floor(i / 2) % L.length], x = i % 2 ? sx[2] - 0.05 : sx[0] + 0.12;
+      const g = new THREE.Group(); g.position.set(x + (i % 2 ? 0 : 0.05), y, -3.5);
+      if (kind === "cup") { const t = trophy(0.42); t.scale.setScalar(1.25); g.add(t); }
+      else if (kind === "medal") {
+        const stand = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.12), plaqueMat); stand.position.y = 0.02; g.add(stand);
+        const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 32), gold); disc.rotation.x = Math.PI / 2; disc.position.set(0, 0.2, 0); g.add(disc);
+        const rb = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.005), ribbon); rb.position.set(0, 0.36, -0.01); g.add(rb);
+      } else {
+        const pl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 0.03), plaqueMat); pl.position.set(0, 0.2, -0.05); pl.rotation.x = -0.12; g.add(pl);
+        const face = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, 0.01), i === 3 ? silver : gold); face.position.set(0, 0.26, -0.025); face.rotation.x = -0.12; g.add(face);
+      }
+      const pq = plaque(a, b2); pq.position.set(0, 0.06, 0.12); pq.rotation.x = -0.35; g.add(pq);
+      shadows(g); tro.add(g);
+    });
     const trophyGroup = new THREE.Group(); props.add(trophyGroup); trophyGroup.add(shelf, tro);
-    const shelfPlate = labelPlate("WINS", 0.36, 0.12); shelfPlate.position.set(4.62, 2.32, -3.25); trophyGroup.add(shelfPlate);
-    addStation("trophies", trophyGroup, { pos: [3.4, 1.8, -0.9], target: [4.7, 1.3, -3.6] });
+    const shelfPlate = labelPlate("WINS", 0.7, 0.2); shelfPlate.position.set(4.62, 2.45, -3.3); trophyGroup.add(shelfPlate);
+    // built against the back wall, then swung onto the right wall: (4.7, -3.6) → (5.7, -2.3), facing −x
+    trophyGroup.rotation.y = -Math.PI / 2; trophyGroup.position.set(5.7 - 3.6, 0, -2.3 - 4.7); trophyGroup.updateMatrixWorld(true);
+    shelfFill.position.set(4.5, 2.7, -2.3);
+    addStation("trophies", trophyGroup, { pos: [3.0, 1.8, -2.3], target: [5.7, 1.4, -2.3] });
 
     // tool chest on the left wall
     const chest = M.metal_tool_chest; fitHeight(chest, 1.05); chest.rotation.y = Math.PI / 2; chest.position.set(-5.85, 0, -1.3); props.add(chest); sitOnFloor(chest);
@@ -546,15 +659,29 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     return (o?.userData.station as StationId) ?? null;
   }
   const el = renderer.domElement;
-  let down: { x: number; y: number; t: number } | null = null;
+  let down: { x: number; y: number; t: number; lx: number; ly: number } | null = null;
+  let dragging = false;
   const onMove = (e: PointerEvent) => {
     const r = el.getBoundingClientRect();
     pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); pointerIn = e.pointerType === "mouse";
+    if (down && introDone) {
+      const dx = e.clientX - down.lx, dy = e.clientY - down.ly; down.lx = e.clientX; down.ly = e.clientY;
+      if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) dragging = true;
+      if (dragging) {
+        if (focused) { focused = null; opt.onFree?.(); }
+        tween = null; look.base += dx * 0.0055; look.pitch = Math.max(-0.45, Math.min(0.3, look.pitch + dy * 0.003)); look.hoverYaw = -pointer.x * 0.42;
+        look.yaw = look.base + look.hoverYaw;
+      }
+    }
   };
-  const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; onMove(e); };
+  const onWinMove = (e: PointerEvent) => { if (e.target !== el) pointerIn = false; };
+  window.addEventListener("pointermove", onWinMove);
+  const onWheel = (e: WheelEvent) => { if (!introDone || focused) return; e.preventDefault(); look.fov = Math.max(30, Math.min(62, look.fov + e.deltaY * 0.02)); };
+  el.addEventListener("wheel", onWheel, { passive: false });
+  const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY, t: performance.now(), lx: e.clientX, ly: e.clientY }; dragging = false; onMove(e); try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ } };
   const onUp = (e: PointerEvent) => {
-    if (!down || !introDone) return;
-    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y); down = null;
+    if (!down || !introDone) { down = null; dragging = false; return; }
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y); down = null; dragging = false;
     if (moved > 8) return;
     onMove(e);
     const id = pick(); if (id) opt.onSelect(id);
@@ -567,7 +694,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   let tween: Tween | null = null;
   let focused: StationId | null = null;
   function flyTo(to: { pos: THREE.Vector3; target: THREE.Vector3 }, dur = 1.3) {
-    tween = { from: { pos: camera.position.clone(), target: controls.target.clone() }, to, t: 0, dur };
+    tween = { from: { pos: camera.position.clone(), target: target.clone() }, to, t: 0, dur };
   }
   function worldAnchor(id: StationId) {
     const s = stations.get(id)!;
@@ -583,7 +710,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     const dir = out.clone().sub(carCentre).setY(0).normalize();
     if (dir.lengthSq() < 0.01) dir.set(0.6, 0, 0.8).normalize();
     // keep the camera on the visitor's side of the car
-    const toCam = HOME().pos.clone().sub(carCentre).setY(0).normalize();
+    const toCam = new THREE.Vector3(3.9, 2.05, 4.7).sub(carCentre).setY(0).normalize();
     dir.lerp(toCam, 0.45).normalize();
     const pos = centre.clone().add(dir.multiplyScalar(narrow() ? 2.6 : 1.85)); pos.y = centre.y + 0.6;
     // shift target so the part sits left of the side panel on desktop
@@ -594,7 +721,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   }
   function focus(id: StationId | null) {
     focused = id;
-    if (!id) { flyTo(HOME()); return; }
+    if (!id) { flyTo(lookPose()); return; }
     const s = stations.get(id); if (!s) return;
     if (parts[id as CarPart]) flyTo(partView(id as CarPart));
     else if (s.view) {
@@ -605,18 +732,17 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   }
 
   /* ---------- zones: walk around the garage ---------- */
+  const ZONE_AT: Record<ZoneId, THREE.Vector3> = {
+    car: CAR, bench: new THREE.Vector3(-3.3, 1.2, -3.6), wall: new THREE.Vector3(0.6, 1.9, -4.2),
+    shelf: new THREE.Vector3(5.7, 1.4, -2.3), board: new THREE.Vector3(-6.3, 1.9, 0.9),
+  };
   function goZone(z: ZoneId) {
     focused = null;
-    if (z === "car") { flyTo(HOME()); return; }
-    const n = narrow();
-    const Z: Record<Exclude<ZoneId, "car">, { pos: [number, number, number]; target: [number, number, number] }> = {
-      bench: { pos: n ? [-1.0, 2.0, 1.0] : [-1.3, 1.85, -0.4], target: [-3.3, 1.2, -3.6] },
-      wall: { pos: n ? [0.6, 2.0, 2.4] : [0.6, 1.95, 0.9], target: [0.6, 1.95, -4.2] },
-      shelf: { pos: n ? [2.2, 1.9, 1.4] : [2.5, 1.8, 0.1], target: [4.7, 1.35, -3.6] },
-      board: { pos: n ? [-2.2, 2.0, 2.6] : [-2.9, 2.0, 1.4], target: [-6.3, 1.9, 0.9] },
-    };
-    flyTo({ pos: new THREE.Vector3(...Z[z].pos), target: new THREE.Vector3(...Z[z].target) }, 1.4);
+    const e = EYE(); let y = yawTo(e, ZONE_AT[z]);
+    while (y - look.base > Math.PI) y -= Math.PI * 2; while (y - look.base < -Math.PI) y += Math.PI * 2;
+    look.base = y; flyTo(lookPose(), 1.1);
   }
+  function turn(dir: number) { focused = null; look.base -= dir * Math.PI / 2; flyTo(lookPose(), 0.9); }
 
   /* ---------- labels ---------- */
   const labels = new Map<string, HTMLElement>();
@@ -660,16 +786,16 @@ export function createGarage(opt: GarageOptions): GarageAPI {
       const flick = it < 0.35 ? 0 : it < 0.5 ? 0.7 : it < 0.62 ? 0.05 : it < 0.75 ? 0.9 : it < 0.85 ? 0.2 : Math.min(1, 0.6 + (it - 0.85) * 1.2);
       lightLevel(flick);
       const k = ease(Math.min(1, Math.max(0, (it - 0.3) / 2.6)));
-      const H0 = HOME(); const start = new THREE.Vector3(7.5, 3.4, 10.5);
-      camera.position.lerpVectors(start, H0.pos, k); controls.target.copy(H0.target);
-      if (it > 2.95) { introDone = true; controls.enabled = true; lightLevel(1); opt.onReady(); }
+      const H0 = HOME(); const start = new THREE.Vector3(0.6, 2.3, 11.5);
+      camera.position.lerpVectors(start, H0.pos, k); target.copy(H0.target);
+      if (it > 2.95) { introDone = true; lightLevel(1); opt.onReady(); }
     }
 
     // camera tween
     if (tween) {
       tween.t += dt / tween.dur; const k = ease(Math.min(1, tween.t));
       camera.position.lerpVectors(tween.from.pos, tween.to.pos, k);
-      controls.target.lerpVectors(tween.from.target, tween.to.target, k);
+      target.lerpVectors(tween.from.target, tween.to.target, k);
       if (tween.t >= 1) tween = null;
     }
     // exploded parts
@@ -700,7 +826,21 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     if (scanTex && t - lastScan > 0.08) { lastScan = t; drawScan(scanTex.image.getContext("2d"), t); scanTex.needsUpdate = true; }
     wireMat.uniforms.t.value = t;
     buggy.update(dt, t);
-    controls.update();
+    // free look: glance with the mouse, push to an edge to keep turning
+    if (introDone && !tween && !focused) {
+      if (pointerIn && !dragging) {
+        look.hoverYaw = -pointer.x * 0.42; look.hoverPitch = pointer.y * 0.12;
+        const ax = Math.abs(pointer.x);
+        if (ax > 0.78 && Math.abs(pointer.y) < 0.72 && !hovered) look.base -= Math.sign(pointer.x) * ((ax - 0.78) / 0.22) * 1.25 * dt;
+      } else if (!pointerIn) { look.hoverYaw *= 1 - Math.min(1, dt * 1.5); look.hoverPitch *= 1 - Math.min(1, dt * 1.5); }
+      const wantYaw = look.base + look.hoverYaw, k = 1 - Math.pow(0.004, dt);
+      look.yaw += (wantYaw - look.yaw) * k;
+      const p = Math.max(-0.5, Math.min(0.35, look.pitch + look.hoverPitch));
+      const e = EYE(); camera.position.lerp(e, k);
+      target.copy(camera.position).add(dirOf(look.yaw, p).multiplyScalar(4));
+      if (Math.abs(camera.fov - look.fov) > 0.05) { camera.fov += (look.fov - camera.fov) * k; camera.updateProjectionMatrix(); }
+    } else if (tween === null && focused) { /* hold */ }
+    camera.lookAt(target);
     composer.render();
     placeLabels();
     raf = QA ? (window.setTimeout(frame, 1500) as unknown as number) : requestAnimationFrame(frame);
@@ -713,7 +853,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   const onResize = () => {
     camera.aspect = W() / H(); camera.updateProjectionMatrix();
     renderer.setSize(W(), H()); composer.setSize(W(), H()); outline.setSize(W(), H());
-    if (!focused && introDone) flyTo(HOME(), 0.6);
+    if (!focused && introDone) flyTo(lookPose(), 0.6);
   };
   window.addEventListener("resize", onResize);
   const onVis = () => { const was = running; running = !document.hidden; if (running && !was) { clock.getDelta(); frame(); } };
@@ -721,12 +861,13 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   void loaded; void total;
 
   return {
-    focus, setXray, bindLabel, startIntro, goZone,
+    focus, setXray, bindLabel, startIntro, goZone, turn,
     dispose() {
       running = false; cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVis);
       el.removeEventListener("pointermove", onMove); el.removeEventListener("pointerdown", onDown); el.removeEventListener("pointerup", onUp); el.removeEventListener("pointerleave", onLeave);
-      controls.dispose(); composer.dispose(); pmrem.dispose();
+      window.removeEventListener("pointermove", onWinMove); el.removeEventListener("wheel", onWheel);
+      composer.dispose(); pmrem.dispose();
       scene.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry.dispose(); (Array.isArray(m.material) ? m.material : [m.material]).forEach((x) => x.dispose()); } });
       renderer.dispose(); el.remove();
     },

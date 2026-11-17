@@ -80,7 +80,7 @@ export default function Bot({ initialQuestion }: { initialQuestion?: string }) {
       <div ref={log} className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-4" aria-live="polite">
         {fresh && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-            <img src={A("me/avatar.webp")} alt="" className="mx-auto h-16 w-16 rounded-full object-cover ring-4 ring-hazard/30" />
+            <div className="relative mx-auto -mt-1 mb-1 overflow-hidden rounded-2xl"><img src={A("me/chat-hero.webp")} alt="Sumahar Pelluri" className="h-40 w-full object-cover object-[50%_30%]" /><div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#14110e] to-transparent" /></div>
             <div className="mt-2 font-cond text-[22px] font-semibold">Hey 👋 ask me anything</div>
             <p className="mx-auto mt-1 max-w-[300px] text-[14px] text-paper/60">What I built, the numbers behind it, or whether I'd fit your team. Pick a topic or type below.</p>
           </motion.div>

@@ -9,6 +9,7 @@ export interface TourStep { target: StationId | null; zone?: ZoneId; title: stri
 /** A 60-second walk through the garage, told in my own voice. */
 export const TOUR: TourStep[] = [
   { target: "driver", title: "Hi, I'm Sumahar.", text: "Mechanical engineer turned operator. This garage is my career: every object opens something I actually built." },
+  { target: "journey", title: "The road so far", text: "VIT engineer → Myntra intern → Wipro → founding team at Rabbit Invest → Masters' Union. Every stop is on this map." },
   { target: "brakes", title: "My signature fix", text: "Investor data nobody trusted. I built the checks that stop bad data before it moves.", stat: "50→95%", statLabel: "data accuracy" },
   { target: "engine", title: "Work that runs itself", text: "I built Rabbit Invest's operations from zero as a founding member, then automated the repetitive work.", stat: "80%", statLabel: "manual ops automated" },
   { target: "accelerator", title: "Growth with numbers", text: "Dashboards that showed where leads dropped. Conversion went from 10% to 50%.", stat: "5×", statLabel: "sales conversion" },

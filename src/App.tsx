@@ -1,8 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, FileText, Flag, LayoutGrid, MessageCircle, Music2, Pause, X, Zap } from "lucide-react";
+import { FileText, Route, Flag, LayoutGrid, MessageCircle, Music2, Pause, X, Zap } from "lucide-react";
 import { GuideCard, Greeting, HelpMenu, TOUR } from "./ui/Guide";
-import { createGarage, type GarageAPI, type ZoneId } from "./scene/garage";
+import { createGarage, type GarageAPI } from "./scene/garage";
 import { createBuggy } from "./scene/buggyEntry";
 import { A, EMAIL } from "./data";
 import { CAR_ORDER, JOBS, PROPS, type CarPart, type StationId } from "./content";
@@ -11,6 +11,7 @@ import { PROJECTS, type Kind } from "./projects";
 const COLS = ([["LIVE", "#5dff9a", "live"], ["CASES", "#f2b705", "case"], ["MU COURSEWORK", "#7fc8ff", "course"], ["WING & PROTOTYPES", "#ff8a65", "lead"]] as const).map(([title, color, k]) => ({ title, color, items: PROJECTS.filter((p) => p.kind === k || (k === "lead" && p.kind === "proto")).map((p) => p.title) }));
 import Bot from "./ui/Bot";
 import Projects from "./ui/Projects";
+import Journey from "./ui/Journey";
 const Specs = lazy(() => import("./ui/Specs"));
 import Achievement from "./ui/Achievement";
 const Drive = lazy(() => import("./ui/Drive"));
@@ -74,6 +75,7 @@ function Garage() {
     if (id === "powerbox") { setXray((x) => !x); setOpen(null); g.focus(null); return; }
     if (id === "radio") { toggleRadio(); return; }
     if (id === "clipboard") { window.location.hash = "#/specs"; return; }
+    if (id === "exit") { g.focus("exit"); window.setTimeout(() => { window.location.hash = "#/drive"; }, 900); return; }
     if (id === "board" || id === "shipped" || id === "prototypes") { setOpen(null); g.focus(id); window.setTimeout(() => setBoard(id === "shipped" ? "live" : id === "prototypes" ? "proto" : "all"), 650); return; }
     setXray(false);
     if (isPart(id)) setSeen((s) => (s.includes(id) ? s : [...s, id]));
@@ -95,6 +97,7 @@ function Garage() {
       boardColumns: COLS,
       onHover: setHover,
       onSelect: (id) => selectRef.current(id),
+      onFree: () => { setOpen(null); setLooked(true); },
       onReady: () => setPhase("live"),
       onProgress: (p) => setProgress(p),
       quality: coarse.current || window.innerWidth < 760 || /[?&]low\b/.test(window.location.search) ? "low" : "high",
@@ -128,7 +131,7 @@ function Garage() {
   const [guide, setGuide] = useState<"greet" | "tour" | "help">("greet");
   const [step, setStep] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [zone, setZone] = useState<ZoneId>("car");
+  const [looked, setLooked] = useState(false);
   useEffect(() => { try { if (localStorage.getItem("sp-toured") === "1") setGuide("help"); } catch { /* ignore */ } }, []);
   const tourGo = useCallback((k: number) => {
     const st = TOUR[k]; setStep(k); setOpen(null); setXray(false);
@@ -138,18 +141,22 @@ function Garage() {
   const endTour = () => { setGuide("help"); api.current?.focus(null); try { localStorage.setItem("sp-toured", "1"); } catch { /* ignore */ } };
   const tourTarget = guide === "tour" ? TOUR[step].target : null;
   const goDrive = () => { window.location.hash = "#/drive"; };
-  const ZONES: [ZoneId, string][] = [["car", "The car"], ["bench", "Workbench"], ["wall", "Back wall"], ["shelf", "Trophies"], ["board", "Build board"]];
-  const moveZone = useCallback((z: ZoneId) => { setZone(z); setOpen(null); setGuide((g) => (g === "tour" ? "help" : g)); api.current?.goZone(z); }, []);
   useEffect(() => {
     if (!live) return;
     const k = (e: KeyboardEvent) => {
       if (open || board || (e.target as HTMLElement)?.closest?.("input,textarea")) return;
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      const i = ZONES.findIndex(([z]) => z === zone); const n = (i + (e.key === "ArrowRight" ? 1 : -1) + ZONES.length) % ZONES.length;
-      moveZone(ZONES[n][0]);
+      setLooked(true); api.current?.turn(e.key === "ArrowRight" ? 1 : -1);
     };
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   });
+  useEffect(() => {
+    if (!live || looked) return;
+    const h = host.current; if (!h) return;
+    const d = () => setLooked(true);
+    h.addEventListener("pointerdown", d); const t = window.setTimeout(d, 14000);
+    return () => { h.removeEventListener("pointerdown", d); window.clearTimeout(t); };
+  }, [live, looked]);
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-ink">
@@ -198,11 +205,12 @@ function Garage() {
 
       {/* header */}
       <header className={`absolute inset-x-0 top-0 z-30 flex items-center gap-2 px-4 py-4 transition-opacity duration-700 md:gap-3 md:px-7 ${phase === "gate" || phase === "loading" ? "opacity-0" : "opacity-100"}`} style={{ paddingTop: "max(16px, env(safe-area-inset-top))" }}>
-        <a href="#/" onClick={(e) => { e.preventDefault(); close(); setXray(false); moveZone("car"); }} className="mr-auto flex items-center gap-3">
+        <a href="#/" onClick={(e) => { e.preventDefault(); close(); setXray(false); api.current?.goZone("car"); }} className="mr-auto flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded bg-hazard font-stencil text-lg text-ink">SP</span>
           <span className="leading-tight"><span className="block font-stencil text-[17px] tracking-wide sm:text-[19px]">SUMAHAR PELLURI</span><span className="hidden font-mono text-[10.5px] tracking-[0.18em] text-paper/60 sm:block">FOUNDER'S OFFICE · OPERATIONS · DATA</span></span>
         </a>
         <button type="button" onClick={() => { setOpen(null); setBoard("all"); }} className="flex items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider backdrop-blur hover:border-hazard"><LayoutGrid size={14} /><span className="hidden sm:inline">PROJECTS</span></button>
+        <button type="button" onClick={() => select("journey")} className="hidden items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard lg:flex"><Route size={14} />JOURNEY</button>
         <button type="button" onClick={() => select("laptop")} aria-label="Ask Sumahar AI" className="flex items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard"><MessageCircle size={14} /><span className="hidden md:inline">ASK ME</span></button>
         <button type="button" onClick={toggleRadio} aria-label={playing ? "Turn the radio off" : "Turn the radio on"} className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-ink/60 backdrop-blur hover:border-hazard">{playing ? <Pause size={15} /> : <Music2 size={15} />}</button>
         <a href="#/specs" aria-label="Spec sheet" className="hidden items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard sm:flex"><FileText size={14} /><span className="hidden lg:inline">SPEC SHEET</span></a>
@@ -212,13 +220,13 @@ function Garage() {
       <AnimatePresence>
         {live && !open && !xray && !board && (
           <motion.button type="button" onClick={goDrive} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: 0.5 }}
-            className="group absolute left-1/2 top-[78px] z-20 -translate-x-1/2 overflow-hidden rounded-xl p-[2px] shadow-[0_0_50px_rgba(242,183,5,.35)]">
+            className="group absolute left-1/2 top-[78px] z-20 -translate-x-1/2 overflow-hidden rounded-xl p-[2px] shadow-[0_0_50px_rgba(242,183,5,.35)] md:bottom-7 md:top-auto">
             <span className="hazard absolute inset-0 animate-[spin_6s_linear_infinite] opacity-90 [background-size:200%_200%]" aria-hidden="true" />
             <span className="relative flex items-center gap-3 rounded-[10px] bg-ink px-5 py-3 md:px-7">
               <Flag className="text-hazard transition-transform group-hover:-rotate-12" size={22} />
               <span className="text-left">
                 <span className="block font-stencil text-[19px] leading-none text-hazard md:text-[24px]">TAKE IT FOR A DRIVE</span>
-                <span className="mt-1 block font-mono text-[10px] tracking-[0.18em] text-paper/70">A 2-MINUTE LAP THROUGH MY CAREER</span>
+                <span className="mt-1 block font-mono text-[10px] tracking-[0.18em] text-paper/70">GET TO KNOW ME IN 2 MINUTES</span>
               </span>
             </span>
           </motion.button>
@@ -236,16 +244,16 @@ function Garage() {
               {guide === "help" && <motion.div key="h" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><HelpMenu open={helpOpen} setOpen={setHelpOpen} onTour={startTour} onProjects={() => { setHelpOpen(false); setBoard("all"); }} onAsk={() => { setHelpOpen(false); select("laptop"); }} onDrive={goDrive} onList={() => { setHelpOpen(false); setList(true); }} /></motion.div>}
             </AnimatePresence>
           </div>
-          {!xray && guide !== "tour" && (
-            <nav aria-label="Move around the garage" className="pointer-events-auto order-1 flex items-center gap-1 self-center rounded-full border border-white/15 bg-oil/85 p-1 backdrop-blur md:order-2 md:absolute md:bottom-6 md:left-1/2 md:-translate-x-1/2">
-              <button type="button" aria-label="Previous area" onClick={() => { const i = ZONES.findIndex(([z]) => z === zone); moveZone(ZONES[(i - 1 + ZONES.length) % ZONES.length][0]); }} className="grid h-8 w-8 place-items-center rounded-full hover:bg-white/10"><ChevronLeft size={16} /></button>
-              {ZONES.map(([z, l]) => (
-                <button key={z} type="button" onClick={() => moveZone(z)} aria-current={zone === z ? "true" : undefined}
-                  className={`rounded-full px-2.5 py-1.5 font-mono text-[10.5px] tracking-wider transition-colors md:px-3.5 ${zone === z ? "bg-hazard text-ink" : "text-paper/75 hover:text-paper"}`}>{l.toUpperCase()}</button>
-              ))}
-              <button type="button" aria-label="Next area" onClick={() => { const i = ZONES.findIndex(([z]) => z === zone); moveZone(ZONES[(i + 1) % ZONES.length][0]); }} className="grid h-8 w-8 place-items-center rounded-full hover:bg-white/10"><ChevronRight size={16} /></button>
-            </nav>
-          )}
+          <div className="order-1 flex-1 md:order-2" />
+          <AnimatePresence>
+            {!xray && !looked && guide !== "tour" && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ delay: 1.2 }}
+                className="pointer-events-none order-1 flex items-center gap-2.5 self-center rounded-full border border-white/15 bg-oil/85 px-4 py-2.5 backdrop-blur md:absolute md:bottom-[104px] md:left-1/2 md:-translate-x-1/2">
+                <motion.span animate={{ x: [-6, 6, -6] }} transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }} className="text-[16px]">{coarse.current ? "👆" : "🖱️"}</motion.span>
+                <span className="font-mono text-[11px] tracking-wider text-paper/85">{coarse.current ? "DRAG TO LOOK AROUND · TAP ANYTHING THAT GLOWS" : "MOVE TO LOOK · PUSH TO THE EDGE OR DRAG TO TURN 360°"}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="pointer-events-auto order-3 hidden md:block">
             <button type="button" onClick={() => setList((v) => !v)} aria-expanded={list} className="flex items-center gap-3 rounded-full border border-white/20 bg-oil/85 py-2 pl-4 pr-2 backdrop-blur hover:border-hazard">
               <span className="font-mono text-[11px] tracking-wider">EXPLORE</span>
@@ -279,6 +287,7 @@ function Garage() {
       <Sheet open={open === "trophies"} onClose={close} label="Trophy shelf" tone="dark"><Trophies /></Sheet>
       <Sheet open={open === "crew"} onClose={close} label="Pit crew" tone="dark" wide><Crew /></Sheet>
       <Sheet open={open === "decco"} onClose={close} label="Decco Store" tone="dark"><Decco /></Sheet>
+      <Sheet open={open === "journey"} onClose={close} label="Career journey" tone="dark"><div className="min-h-0 flex-1 overflow-y-auto"><Journey onHire={() => { close(); setAward({ how: "garage" }); }} /></div></Sheet>
       <Sheet open={open === "driver"} onClose={close} label="About the driver" tone="dark"><Driver onProjects={() => { close(); setBoard("all"); }} /></Sheet>
       <AnimatePresence>{board && <Projects start={board === "live" ? 1 : 0} onClose={() => { setBoard(null); api.current?.focus(null); }} onAsk={(q) => { setBoard(null); setAskQ((a) => ({ q, n: a.n + 1 })); select("laptop"); }} />}</AnimatePresence>
       <Sheet open={open === "laptop"} onClose={() => { close(); setAskQ((a) => ({ n: a.n + 1 })); }} label="Ask Sumahar" tone="dark"><Bot key={askQ.n} initialQuestion={askQ.q} /></Sheet>

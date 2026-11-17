@@ -1,3 +1,4 @@
+import Journey from "./Journey";
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUpRight, X } from "lucide-react";
@@ -56,25 +57,36 @@ export function JobCardView({ id, onBonnet }: { id: CarPart; onBonnet: () => voi
       <div className="min-h-0 flex-1 overflow-y-auto">
         <AnimatePresence mode="wait">
           {tab === "card" ? (
-            <motion.div key="c" initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} className="space-y-5 px-5 py-5">
-              <div>
-                <h2 className="font-cond text-[26px] font-semibold leading-[1.1] text-black">{j.title}</h2>
-                <p className="mt-1 font-mono text-[11px] tracking-wide text-black/55">{j.where}</p>
-              </div>
-              <Field k="COMPLAINT">{j.complaint}</Field>
-              <Field k="WORK DONE">{j.work}</Field>
-              <div className="rounded-lg border-2 border-black bg-white/40 p-4">
-                <div className="font-mono text-[10px] tracking-[0.2em] text-black/55">RESULT ON THE DYNO</div>
-                <div className="font-stencil text-[clamp(40px,7vw,58px)] leading-none text-rust">{j.result.big}</div>
-                <div className="mt-1 text-[15px] text-black/80">{j.result.label}</div>
-                {j.extra && <div className="mt-2 border-t border-black/15 pt-2 text-sm text-black/70">{j.extra}</div>}
+            <motion.div key="c" initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} className="space-y-4 px-5 py-5">
+              {/* the result first: that's what a reader came for */}
+              <div className="relative overflow-hidden rounded-xl bg-black p-4 text-paper">
+                <div className="font-mono text-[10px] tracking-[0.22em] text-hazard">RESULT</div>
+                <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 240, damping: 16, delay: 0.1 }}
+                  className="origin-left whitespace-nowrap font-stencil text-[clamp(34px,6.4vw,52px)] leading-none text-hazard">{j.result.big}</motion.div>
+                <div className="mt-1 text-[14.5px] text-paper/80">{j.result.label}</div>
+                {j.extra && <div className="mt-2 border-t border-white/15 pt-2 text-[13px] text-paper/65">{j.extra}</div>}
               </div>
               <div>
-                <div className="mb-2 font-mono text-[10px] tracking-[0.2em] text-black/55">PARTS USED</div>
-                <div className="flex flex-wrap gap-1.5">{j.tools.map((t) => <span key={t} className="rounded border border-black/30 px-2 py-1 font-mono text-[11px] text-black/80">{t}</span>)}</div>
+                <h2 className="font-cond text-[22px] font-semibold leading-tight text-black">{j.title}</h2>
+                <p className="mt-0.5 font-mono text-[10.5px] tracking-wide text-black/55">{j.where}</p>
               </div>
+              <div className="rounded-lg border-l-4 border-rust bg-rust/[.07] px-3 py-2.5">
+                <div className="font-mono text-[10px] tracking-[0.2em] text-rust">THE PROBLEM</div>
+                <p className="text-[14.5px] leading-snug text-black/85">{j.complaint}</p>
+              </div>
+              <div>
+                <div className="mb-1.5 font-mono text-[10px] tracking-[0.2em] text-black/55">WHAT I DID</div>
+                <ol className="space-y-1.5">
+                  {(j.did ?? [j.work]).map((d, i) => (
+                    <motion.li key={d} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 + i * 0.1 }} className="flex gap-2.5 text-[14.5px] leading-snug text-black/85">
+                      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-black font-mono text-[10px] font-bold text-hazard">{i + 1}</span>{d}
+                    </motion.li>
+                  ))}
+                </ol>
+              </div>
+              <div className="flex flex-wrap gap-1.5">{j.tools.map((t) => <span key={t} className="rounded-full border border-black/25 px-2.5 py-1 font-mono text-[10.5px] text-black/75">{t}</span>)}</div>
               {j.links && <div className="flex flex-wrap gap-2">{j.links.map(([l, h]) => <a key={h} href={h} target="_blank" rel="noopener" className="inline-flex items-center gap-1 rounded-full bg-black px-4 py-2 font-mono text-xs text-hazard hover:bg-black/80">{l} <ArrowUpRight size={13} /></a>)}</div>}
-              <button type="button" onClick={() => setTab("wiring")} className="w-full rounded-lg border border-dashed border-black/40 py-3 font-mono text-xs tracking-wider text-black/70 hover:bg-black/5">SEE THE DATA WIRING UNDER THIS PART →</button>
+              <button type="button" onClick={() => setTab("wiring")} className="w-full rounded-lg border border-dashed border-black/40 py-3 font-mono text-xs tracking-wider text-black/70 hover:bg-black/5">HOW THE DATA FLOWED UNDER THIS →</button>
             </motion.div>
           ) : (
             <motion.div key="w" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} className="bp-grid min-h-full space-y-5 px-5 py-5 text-[#cfe9ff]">
@@ -403,9 +415,9 @@ export function Driver({ onProjects }: { onProjects: () => void }) {
           </div>
         </div>
         <div className="space-y-4 p-5 text-[15.5px] leading-relaxed text-paper/85">
-          <p>I trained as a mechanical engineer at VIT and designed the braking system on our BAJA SAE car, which finished eighth in India. It taught me to think in systems: every part has inputs, failure modes and someone who depends on it.</p>
-          <p>Myntra and Wipro taught me that data only matters when it changes a decision. At Rabbit Invest I joined as about the second hire and built the operations function as a founding member, accountable for the numbers in front of the founder.</p>
-          <p>Now I'm doing my PGP at Masters' Union, where I'm VP of the AI &amp; Analytics Wing and keep building. Next: a <span className="text-hazard">Founder's Office, operations, strategy or data</span> role from 2027.</p>
+          <p>Mechanical engineer turned operator. I think in systems: every part has inputs, failure modes and someone who depends on it.</p>
+          <div className="font-mono text-[10.5px] tracking-[0.22em] text-hazard">THE ROAD SO FAR</div>
+          <Journey compact />
           <div className="flex flex-wrap gap-2 pt-1">
             <button type="button" onClick={onProjects} className="rounded-full bg-hazard px-4 py-2 font-mono text-xs font-bold text-ink">SEE EVERYTHING I'VE BUILT</button>
             <a href={LINKS.linkedin} target="_blank" rel="noopener" className="inline-flex items-center gap-1 rounded-full border border-white/25 px-4 py-2 font-mono text-xs hover:border-hazard">LINKEDIN <ArrowUpRight size={12} /></a>

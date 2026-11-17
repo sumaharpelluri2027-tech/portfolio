@@ -47,8 +47,7 @@ export default function Achievement({ how, lap, onClose }: { how: "garage" | "tr
             </motion.div>
             <h2 className="mt-3 font-stencil text-[clamp(30px,4.2vw,46px)] leading-[0.95]">{how === "track" ? "YOU JUST TEST‑DROVE" : "YOU FOUND"}<br /><span className="text-hazard">YOUR NEXT HIRE.</span></h2>
             <p className="mt-3 text-[15.5px] text-paper/80">
-              {how === "track" ? `Lap complete${lap ? ` in ${lap}` : ""}. ` : "Every system inspected. "}
-              You've collected all seven things I bring to a team:
+              {how === "track" ? "Meter full: you know me 100% now. " : ""}Here are the seven things I'd bring to your team:
             </p>
             <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {TRAITS.map((t, k) => (

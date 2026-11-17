@@ -1,19 +1,11 @@
 {
   "name": "sumahar-portfolio",
-  "private": true,
-  "version": "2.0.0",
-  "type": "module",
+  "version": "3.0.0",
+  "description": "Sumahar's Garage: a 3D portfolio for sumaharpelluri.in (React, Three.js, Tailwind, Framer Motion)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build --outDir out",
     "build:artifact": "vite build --mode artifact"
-  },
-  "dependencies": {
-    "framer-motion": "^11.11.17",
-    "lucide-react": "^0.454.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "three": "^0.169.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
@@ -27,5 +19,13 @@
     "vite": "^5.4.11",
     "vite-plugin-singlefile": "^2.0.3"
   },
-  "description": "Portfolio for sumaharpelluri.in: React + Vite + Tailwind + Framer Motion + Three.js"
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "framer-motion": "^11.11.17",
+    "lucide-react": "^0.454.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
+  }
 }

@@ -3,11 +3,12 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
-      colors: { space: "#030014", drawer: "#333333", lime: "#CCFF00", energy: "#88AAFF" },
+      colors: { ink: "#0c0b0a", paper: "#efe9dc", hazard: "#f2b705", oil: "#151311", bp: "#041224", bpline: "#4fc3ff", lcd: "#5dff9a", rust: "#c8261b" },
       fontFamily: {
-        display: ['"Anton"', '"Impact"', '"Arial Black"', "sans-serif"],
-        sans: ['"Space Grotesk"', '"Inter"', "system-ui", "sans-serif"],
-        mono: ['"IBM Plex Mono"', '"SFMono-Regular"', "Consolas", "monospace"],
+        stencil: ['"Saira Stencil One"', '"Impact"', "sans-serif"],
+        sans: ['"Barlow"', '"Inter"', "system-ui", "sans-serif"],
+        cond: ['"Barlow Condensed"', '"Barlow"', "sans-serif"],
+        mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
       },
     },
   },

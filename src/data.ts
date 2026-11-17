@@ -104,7 +104,7 @@ export const WING = [
 export const SKETCHES = [
   { s: "Round 2 · The Ken", hot: true, t: "Arogya", d: "Agentic AI for family health that reorders medicine for a parent in another city. Shortlisted for Round 2 of The Ken's Great Rewiring." },
   { s: "Prototype", t: "Snip", d: "A marketplace and CRM connecting people with tailors, boutiques and designers across India." },
-  { s: "Validating", t: "FoodTruth AI", d: "Decodes packaged-food claims, ingredients and nutrition for fitness-focused buyers." },
+  { s: "Live · NutriSathi", hot: true, t: "NutriSathi (FoodTruth AI)", d: "Scan a packaged food to see its claims, ingredients and nutrition explained. Live at nutrisathi.app.", href: "https://nutrisathi.app" },
   { s: "Delivered", hot: true, t: "IKSHANA Z INC", d: "A multi-state incorporation analysis on tax and permits. The client adopted my Delaware recommendation." },
   { s: "Completed", t: "TrustMRR EDA", d: "Exploratory analysis of a SaaS dataset, written up as a consulting-style executive summary." },
   { s: "Completed", t: "AI Insurance Assistant", d: "Claims-processing automation in Make.com, with a map of the Indian insurtech sector." },

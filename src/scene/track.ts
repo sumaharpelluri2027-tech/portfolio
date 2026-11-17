@@ -8,7 +8,11 @@ import type { Buggy } from "./buggyTypes";
 
 /* ================================================================== API */
 export type GateId = "steering" | "accelerator" | "engine" | "brakes" | "fuel" | "nav" | "projects" | "pit";
-export interface GateSpec { id: GateId; label: string; sub: string }
+export interface GateSpec {
+  id: GateId; label: string; sub: string;
+  /** optional CSS hex accent (banner, post light strips, timing beam, burst). Falls back to a vivid palette by index. */
+  color?: string;
+}
 export interface Telemetry { speedKmh: number; rpm: number; gear: number; lapTime: number; bestLap: number | null; gatesCleared: GateId[]; nextGate: GateId | null; }
 export interface TrackOptions {
   container: HTMLElement;
@@ -25,6 +29,10 @@ export interface TrackAPI {
   resetCar(): void;
   teleportToGate(id: GateId): void;
   dispose(): void;
+  /** ~6 s finale over the start/finish: fireworks, gantry confetti, flashing green start lights, arpeggio. */
+  celebrate(): void;
+  /** WebAudio engine/chime/landing/finale sounds. Default off; call with true from a user gesture. */
+  setSound(on: boolean): void;
 }
 
 /* ============================================================ constants */
@@ -46,8 +54,13 @@ const GRAV = 17;
 const RAMP = { s: 77, len: 5.2, h: 0.85, w: 3.8 };
 const RAMP_GAP: [number, number] = [70, 92];   // no gates here
 const GARAGE = { x: -12, z: -16.5 };
-const AMBER = new THREE.Color(0xffa21a);
 const GREEN = new THREE.Color(0x3dff8a);
+/** vivid default gate accents, used by index when a GateSpec has no colour */
+const GATE_PALETTE = ["#ff2e88", "#ffb21a", "#18d4ff", "#7dff3a", "#a66bff", "#ff6a1f", "#1fffc8", "#ffe14a"];
+/** golden-hour sun: where the disc sits in the sky (low) and where the key light comes from (a bit higher) */
+const SUN_AZ = new THREE.Vector2(-0.98, 0.2).normalize();
+const SUN_SKY = new THREE.Vector3(SUN_AZ.x, 0.075, SUN_AZ.y).normalize();
+const SUN_DIR = new THREE.Vector3(SUN_AZ.x, 0.5, SUN_AZ.y).normalize();
 
 /* ============================================================== helpers */
 function mulberry(seed: number) {
@@ -148,7 +161,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, low ? 1 : 1.75));
   renderer.setSize(W(), H());
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.05;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -157,9 +170,9 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   renderer.domElement.style.display = "block";
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b1020);
-  const FOG = new THREE.Color(0x151c2e);
-  scene.fog = new THREE.Fog(FOG, 38, 200);
+  const FOG = new THREE.Color(0xd8808a);
+  scene.background = FOG.clone();
+  scene.fog = new THREE.Fog(FOG, 60, 260);
   const camera = new THREE.PerspectiveCamera(56, W() / H(), 0.1, 1400);
 
   const T = buildTrackData();
@@ -182,10 +195,10 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   const yawAt = (i: number) => Math.atan2(tx[i], tz[i]);
 
   /* ---------------------------------------------------------- lights */
-  const hemi = new THREE.HemisphereLight(0x6a80b4, 0x2a2016, 0.75);
+  const hemi = new THREE.HemisphereLight(0xffb3c6, 0x6a4a2e, 1.35);
   scene.add(hemi);
-  const MOON_DIR = new THREE.Vector3(-0.45, 0.62, 0.64).normalize();
-  const moon = new THREE.DirectionalLight(0x9db3e6, 0.62);
+  const MOON_DIR = SUN_DIR; // the key light is now the low golden-hour sun
+  const moon = new THREE.DirectionalLight(0xffc08a, 2.7);
   moon.castShadow = true;
   moon.shadow.mapSize.set(low ? 1024 : 2048, low ? 1024 : 2048);
   Object.assign(moon.shadow.camera, { left: -17, right: 17, top: 17, bottom: -17, near: 1, far: 90 });
@@ -195,42 +208,58 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   scene.add(gateLight);
 
   /* ------------------------------------------------------------- sky */
+  // golden-hour gradient: deep violet zenith -> magenta -> hot orange at the horizon, a big low sun and stylised clouds
   const skyMat = new THREE.ShaderMaterial({
+    defines: { OCT: low ? 3 : 4 },
     uniforms: {
-      zen: { value: new THREE.Color(0x050916) }, mid: { value: new THREE.Color(0x18244a) },
-      hor: { value: new THREE.Color(0x4b4a72) }, glow: { value: new THREE.Color(0xd2703a) },
-      glowDir: { value: new THREE.Vector3(0.75, 0, -0.66).normalize() }, fogC: { value: FOG.clone() },
+      zen: { value: new THREE.Color(0x2a1660) }, mid: { value: new THREE.Color(0x9a2f8e) },
+      hor: { value: new THREE.Color(0xff7a4a) }, sunC: { value: new THREE.Color(0xffc76a) },
+      sunDir: { value: SUN_SKY.clone() }, fogC: { value: FOG.clone() }, uTime: { value: 0 }, uDim: { value: 0 },
     },
     vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }",
-    fragmentShader: `uniform vec3 zen, mid, hor, glow, glowDir, fogC; varying vec3 vDir;
+    fragmentShader: `uniform vec3 zen, mid, hor, sunC, sunDir, fogC; uniform float uTime, uDim; varying vec3 vDir;
+      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+        return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
+      float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < OCT; i++){ s += a*noise(p); p = p*2.03 + 7.1; a *= .5; } return s; }
       void main(){ vec3 d = normalize(vDir); float h = d.y;
-        vec3 c = mix(hor, mid, smoothstep(0.0, 0.2, h)); c = mix(c, zen, smoothstep(0.18, 0.75, h));
-        vec2 hz = normalize(d.xz + 1e-5); float a = max(dot(hz, glowDir.xz), 0.);
-        float g = pow(a, 5.) * (1. - smoothstep(-0.02, 0.32, h)); c += glow * g * 0.9;
-        c += glow * pow(a, 40.) * (1. - smoothstep(0., 0.08, h)) * 0.6;
-        c = mix(c, fogC, 1. - smoothstep(-0.06, 0.02, h));
+        vec2 hz = normalize(d.xz + 1e-5); float az = dot(hz, normalize(sunDir.xz)) * .5 + .5; // 1 = towards the sun
+        vec3 horC = mix(mix(vec3(.86,.34,.55), hor, az), vec3(.98,.44,.16), pow(az, 6.));
+        vec3 c = mix(horC, mid, smoothstep(0.0, 0.28, h)); c = mix(c, zen, smoothstep(0.22, 0.85, h));
+        float a = max(dot(d, sunDir), 0.);
+        c += sunC * (pow(a, 8.) * .16 + pow(a, 90.) * .38) * (1. - smoothstep(0., .6, h));
+        // clouds on a virtual plane, streaked horizontally, lit pink/gold from the sun side, violet underneath
+        if (h > 0.0) {
+          vec2 p = d.xz / (h + .09); p *= vec2(.55, 1.6);
+          float n = fbm(p * .9 + vec2(uTime * .006, 0.));
+          float m = smoothstep(.5, .72, n) * smoothstep(0., .07, h) * (1. - smoothstep(.45, .8, h));
+          float lit = smoothstep(.45, .85, fbm(p * .9 + vec2(uTime * .006, 0.) + normalize(sunDir.xz) * .18));
+          vec3 cc = mix(vec3(.42,.2,.5), mix(vec3(1.,.52,.55), vec3(1.,.82,.5), az), .35 + .65 * (1. - lit));
+          cc += sunC * pow(a, 10.) * .5;
+          c = mix(c, cc, m * .85);
+        }
+        // sun disc (drawn over clouds, HDR so the bloom catches it)
+        float disc = smoothstep(.99945, .99965, dot(d, sunDir));
+        c = mix(c, vec3(1.,.8,.5) * 2.4, disc);
+        // finale: the sky drops towards deep violet so the fireworks pop
+        c = mix(c, c * vec3(.32,.22,.5), uDim * smoothstep(-.02, .25, h));
+        c = mix(c, fogC, 1. - smoothstep(-0.05, 0.015, h));
         gl_FragColor = vec4(c, 1.); }`,
     side: THREE.BackSide, depthWrite: false, fog: false,
   });
   const skyGroup = new THREE.Group(); scene.add(skyGroup);
   const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), skyMat); sky.renderOrder = -10; skyGroup.add(sky);
   {
-    const n = low ? 400 : 900, pos = new Float32Array(n * 3);
+    // a few early stars high up in the violet
+    const n = low ? 70 : 160, pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
-      const u = rand() * Math.PI * 2, v = 0.12 + Math.pow(rand(), 0.7) * 0.88;
+      const u = rand() * Math.PI * 2, v = 0.62 + rand() * 0.38;
       const r = Math.sqrt(1 - v * v);
       pos.set([Math.cos(u) * r * 850, v * 850, Math.sin(u) * r * 850], i * 3);
     }
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    const stars = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xc9d6ff, size: 1.4, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.8, depthWrite: false }));
+    const stars = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffe6f4, size: 1.3, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.55, depthWrite: false }));
     skyGroup.add(stars);
-    const moonTex = canvasTex(128, 128, (c) => {
-      const gr = c.createRadialGradient(64, 64, 0, 64, 64, 64);
-      gr.addColorStop(0, "rgba(255,250,235,1)"); gr.addColorStop(0.32, "rgba(240,240,255,1)"); gr.addColorStop(0.36, "rgba(170,190,255,0.35)"); gr.addColorStop(1, "rgba(120,140,220,0)");
-      c.fillStyle = gr; c.fillRect(0, 0, 128, 128);
-    });
-    const moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, fog: false, depthWrite: false, color: 0xffffff }));
-    moonSprite.scale.setScalar(70); moonSprite.position.copy(MOON_DIR).multiplyScalar(820); skyGroup.add(moonSprite);
   }
 
   /* --------------------------------------------- environment for metals */
@@ -240,19 +269,19 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     env.add(new THREE.Mesh(new THREE.SphereGeometry(40, 24, 12), skyMat));
     const em = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffc98a).multiplyScalar(6) });
     for (const [x, y, z] of [[20, 12, 5], [-18, 10, -12], [5, 14, 22]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(5, 2, 5), em); b.position.set(x, y, z); env.add(b); }
-    const grd = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ color: 0x1a1612 })); grd.rotation.x = -Math.PI / 2; grd.position.y = -1; env.add(grd);
+    const grd = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ color: 0x4a3a26 })); grd.rotation.x = -Math.PI / 2; grd.position.y = -1; env.add(grd);
     scene.environment = pmrem.fromScene(env, 0, 0.1, 200).texture;
-    (scene as unknown as { environmentIntensity: number }).environmentIntensity = 0.45;
+    (scene as unknown as { environmentIntensity: number }).environmentIntensity = 0.55;
     env.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry.dispose(); if (m.material !== skyMat) (m.material as THREE.Material).dispose(); } });
   }
 
   /* ---------------------------------------------------------- ground */
   const world = new THREE.Group(); scene.add(world);
   const grassTex = canvasTex(256, 256, (g) => {
-    g.fillStyle = "#2a3520"; g.fillRect(0, 0, 256, 256);
+    g.fillStyle = "#4a8a2a"; g.fillRect(0, 0, 256, 256);
     for (let i = 0; i < 9000; i++) {
       const v = rand();
-      g.fillStyle = v < 0.5 ? `rgba(${20 + rand() * 30},${40 + rand() * 40},${18 + rand() * 20},0.55)` : v < 0.8 ? `rgba(${60 + rand() * 40},${55 + rand() * 30},${30},0.35)` : "rgba(10,14,8,0.5)";
+      g.fillStyle = v < 0.5 ? `rgba(${50 + rand() * 40},${100 + rand() * 50},${20 + rand() * 20},0.55)` : v < 0.8 ? `rgba(${150 + rand() * 50},${140 + rand() * 40},${50},0.35)` : "rgba(30,50,18,0.5)";
       g.fillRect(rand() * 256, rand() * 256, 1 + rand() * 2, 1 + rand() * 3);
     }
   }, true, true);
@@ -264,7 +293,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     for (let i = 0; i < pa.count; i++) {
       const x = pa.getX(i), z = pa.getZ(i);
       const n = 0.5 + 0.25 * Math.sin(x * 0.09 + Math.cos(z * 0.07) * 2) + 0.25 * Math.sin(z * 0.13 + x * 0.04);
-      const c = new THREE.Color().setRGB(0.55 + n * 0.5, 0.6 + n * 0.45, 0.5 + n * 0.4);
+      const c = new THREE.Color().setRGB(0.5 + n * 0.4, 0.62 + n * 0.42, 0.4 + n * 0.25);
       col.set([c.r, c.g, c.b], i * 3);
     }
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
@@ -292,7 +321,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   // a ribbon whose left edge is at -left, right edge at +right; winding = up
   const dirtTex = canvasTex(512, 1024, (g) => {
     const Wc = 512, Hc = 1024;
-    g.fillStyle = "#6c513d"; g.fillRect(0, 0, Wc, Hc);
+    g.fillStyle = "#a8714a"; g.fillRect(0, 0, Wc, Hc);
     const blot = (x: number, y: number, r: number, c: string) => {
       for (const oy of [-Hc, 0, Hc]) { const gr = g.createRadialGradient(x, y + oy, 0, x, y + oy, r); gr.addColorStop(0, c); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(x - r, y + oy - r, r * 2, r * 2); }
     };
@@ -310,7 +339,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     for (const cx of [0.36, 0.44, 0.56, 0.64]) {
       for (let i = 0; i < 900; i++) {
         const y = rand() * Hc, x = cx * Wc + (rand() - 0.5) * 22 + Math.sin(y * 0.012 + cx * 9) * 10;
-        g.fillStyle = `rgba(40,28,20,${0.08 + rand() * 0.12})`; g.fillRect(x, y, 3 + rand() * 6, 10 + rand() * 30);
+        g.fillStyle = `rgba(60,36,22,${0.05 + rand() * 0.08})`; g.fillRect(x, y, 3 + rand() * 6, 10 + rand() * 30);
       }
     }
     // speckle + pebbles
@@ -323,7 +352,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   }, true, true);
   const DIRT_V = 8; // metres per texture repeat along the track
   const dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex, roughness: 0.96, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-  if (!low) { dirtMat.bumpMap = dirtTex; dirtMat.bumpScale = 1.6; }
+  if (!low) { dirtMat.bumpMap = dirtTex; dirtMat.bumpScale = 0.9; }
   const track = new THREE.Mesh(
     ribbon(0, NS, (i) => -T.offL[i] - 0.25, (i) => T.offR[i] + 0.25, 0.012, (i, j, _s, d) => [0.5 + d / (2 * WALL_D + 0.5), (j * ds) / DIRT_V]),
     dirtMat,
@@ -509,7 +538,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   const inGarage = (x: number, z: number) => x > GARAGE.x - 11 && x < GARAGE.x + 11 && z > GARAGE.z - 8 && z < -5;
   {
     const bushGeo = new THREE.IcosahedronGeometry(1, 0);
-    const bushMat = new THREE.MeshStandardMaterial({ color: 0x2b3a22, roughness: 1, flatShading: true });
+    const bushMat = new THREE.MeshStandardMaterial({ color: 0x5f8a2c, roughness: 1, flatShading: true });
     const n = low ? 160 : 340;
     const bushes = new THREE.InstancedMesh(bushGeo, bushMat, n);
     let k = 0, guard = 0;
@@ -518,39 +547,48 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       if (nearTrack(x, z, WALL_D + 2.2) || inGarage(x, z)) continue;
       const s = 0.35 + rand() * 0.9;
       bushes.setMatrixAt(k, place(p4.set(x, s * 0.25, z), rand() * 6, new THREE.Vector3(s * (1 + rand() * 0.6), s * (0.5 + rand() * 0.4), s * (1 + rand() * 0.6))));
-      const c = new THREE.Color().setHSL(0.22 + rand() * 0.08, 0.3, 0.6 + rand() * 0.5); bushes.setColorAt(k, c); k++;
+      // mostly lush greens, the odd golden or blossom-pink shrub
+      const r0 = rand();
+      const c = r0 < 0.08 ? new THREE.Color().setHSL(0.93, 0.7, 0.75) : r0 < 0.2 ? new THREE.Color().setHSL(0.12, 0.85, 0.8) : new THREE.Color().setHSL(0.2 + rand() * 0.08, 0.5, 0.65 + rand() * 0.3);
+      bushes.setColorAt(k, c); k++;
     }
     bushes.count = k; bushes.computeBoundingSphere(); bushes.receiveShadow = true; world.add(bushes);
 
     const treeGeo = new THREE.ConeGeometry(1, 1, 7, 1).translate(0, 0.5, 0);
-    const treeMat = new THREE.MeshLambertMaterial({ color: 0x101a14 });
+    const treeMat = new THREE.MeshLambertMaterial({ color: 0x2f6a3a });
     const nt = low ? 260 : 520;
     const trees = new THREE.InstancedMesh(treeGeo, treeMat, nt);
     for (let i = 0; i < nt; i++) {
       const a = rand() * Math.PI * 2, r = 52 + Math.pow(rand(), 0.8) * 120;
       const x = 3 + Math.cos(a) * r, z = 13 + Math.sin(a) * r, h = 6 + rand() * 10;
       trees.setMatrixAt(i, place(p4.set(x, 0, z), 0, new THREE.Vector3(h * (0.22 + rand() * 0.12), h, h * (0.22 + rand() * 0.12))));
+      trees.setColorAt(i, new THREE.Color().setHSL(0.3 + rand() * 0.12, 0.45, 0.55 + rand() * 0.35));
     }
     trees.computeBoundingSphere(); world.add(trees);
 
     // hills ring
     const seg = 120, rows = [180, 230, 290, 380];
-    const pos: number[] = [], idx: number[] = [];
+    // hazy violet hills, lighter (more aerial perspective) towards the sun and with distance
+    const pos: number[] = [], idx: number[] = [], col: number[] = [];
+    const hNear = new THREE.Color(0x5a3a78), hFar = new THREE.Color(0xc0628a), hSun = new THREE.Color(0xf09070), hc = new THREE.Color();
     for (let r = 0; r < rows.length; r++) for (let s = 0; s <= seg; s++) {
       const a = (s / seg) * Math.PI * 2;
       const hgt = r === 0 ? -1 : r === 3 ? 10 : (r === 1 ? 10 : 22) * (0.45 + 0.35 * Math.sin(a * 3 + 1) + 0.2 * Math.sin(a * 7 + 2) + 0.15 * Math.sin(a * 13));
       pos.push(3 + Math.cos(a) * rows[r], Math.max(hgt, r === 0 ? -1 : 2), 13 + Math.sin(a) * rows[r]);
+      const toSun = Math.max(0, Math.cos(a) * SUN_AZ.x + Math.sin(a) * SUN_AZ.y);
+      hc.copy(hNear).lerp(hFar, r === 0 ? 0.0 : r === 1 ? 0.15 : r === 2 ? 0.45 : 0.8).lerp(hSun, Math.pow(toSun, 3) * 0.6);
+      col.push(hc.r, hc.g, hc.b);
     }
     for (let r = 0; r < rows.length - 1; r++) for (let s = 0; s < seg; s++) {
       const a = r * (seg + 1) + s, b = a + seg + 1;
       idx.push(a, a + 1, b, a + 1, b + 1, b);
     }
-    const hg = new THREE.BufferGeometry(); hg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); hg.setIndex(idx);
-    const hills = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: 0x0c1220, side: THREE.DoubleSide })); world.add(hills);
+    const hg = new THREE.BufferGeometry(); hg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); hg.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); hg.setIndex(idx);
+    const hills = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false })); world.add(hills);
   }
 
   /* -------------------------------------------- floodlight towers */
-  const lampMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xfff0d2, emissiveIntensity: 5.5 });
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xfff0d2, emissiveIntensity: 2.2 });
   const steelMat = new THREE.MeshStandardMaterial({ color: 0x4a4f55, metalness: 0.7, roughness: 0.45 });
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x1c1d20, metalness: 0.5, roughness: 0.6 });
   function tower(x: number, z: number, ax: number, az: number, light: boolean) {
@@ -564,10 +602,10 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       const lamp = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.44), lampMat);
       lamp.position.set(-0.82 + c * 0.82, 0.28 - r * 0.56, 0.13); frame.add(lamp);
     }
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffd7a0, transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending }));
-    halo.scale.setScalar(4.2); halo.position.set(0, 0, 0.4); frame.add(halo);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffd7a0, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.scale.setScalar(3.4); halo.position.set(0, 0, 0.4); frame.add(halo);
     if (light) {
-      const sp = new THREE.SpotLight(0xffd49a, low ? 1700 : 1500, 90, 0.62, 0.75, 2);
+      const sp = new THREE.SpotLight(0xffd49a, low ? 520 : 420, 90, 0.62, 0.75, 2);
       sp.position.set(x, 15, z); sp.target.position.set(ax, 0, az);
       scene.add(sp, sp.target);
     }
@@ -586,7 +624,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   function buildGarage() {
     const g = new THREE.Group(); g.position.set(GARAGE.x, 0, GARAGE.z); world.add(g);
     const corr = canvasTex(512, 512, (c) => {
-      c.fillStyle = "#4a5562"; c.fillRect(0, 0, 512, 512);
+      c.fillStyle = "#2c7d86"; c.fillRect(0, 0, 512, 512);
       for (let x = 0; x < 512; x += 16) { const gr = c.createLinearGradient(x, 0, x + 16, 0); gr.addColorStop(0, "rgba(255,255,255,0.10)"); gr.addColorStop(0.5, "rgba(0,0,0,0.22)"); gr.addColorStop(1, "rgba(255,255,255,0.10)"); c.fillStyle = gr; c.fillRect(x, 0, 16, 512); }
       for (let i = 0; i < 60; i++) { const x = rand() * 512, l = 40 + rand() * 200; const gr = c.createLinearGradient(0, 0, 0, l); gr.addColorStop(0, "rgba(120,60,25,0.45)"); gr.addColorStop(1, "rgba(120,60,25,0)"); c.fillStyle = gr; c.fillRect(x, rand() * 300, 2 + rand() * 4, l); }
     }, true, true);
@@ -645,21 +683,55 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 4.6, 6), steelMat); pole.position.set(x, 2.3, z); pole.castShadow = true; world.add(pole);
     const tex = canvasTex(128, 80, (c) => {
       if (kind === 0) { for (let i = 0; i < 8; i++) for (let j = 0; j < 5; j++) { c.fillStyle = (i + j) % 2 ? "#111" : "#eee"; c.fillRect(i * 16, j * 16, 16, 16); } }
-      else if (kind === 1) { c.fillStyle = "#ffae1a"; c.fillRect(0, 0, 128, 80); c.fillStyle = "#14110e"; c.font = `44px ${STENCIL}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("BAJA", 64, 42); }
-      else if (kind === 2) { c.fillStyle = "#1d3f8f"; c.fillRect(0, 0, 128, 80); c.fillStyle = "#f2f2f2"; c.font = `40px ${STENCIL}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("MU", 64, 42); }
-      else { c.fillStyle = "#c22a1e"; c.fillRect(0, 0, 128, 80); c.fillStyle = "#f2f2f2"; c.fillRect(0, 34, 128, 12); }
+      else if (kind === 1) { c.fillStyle = "#ffb21a"; c.fillRect(0, 0, 128, 80); c.fillStyle = "#1a0f22"; c.font = `44px ${STENCIL}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("BAJA", 64, 42); }
+      else if (kind === 2) { c.fillStyle = "#ff2e88"; c.fillRect(0, 0, 128, 80); c.fillStyle = "#fff4fa"; c.font = `40px ${STENCIL}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("MU", 64, 42); }
+      else { c.fillStyle = "#18c8f0"; c.fillRect(0, 0, 128, 80); c.fillStyle = "#fffbe8"; c.fillRect(0, 30, 128, 20); c.fillStyle = "#ff6a1f"; c.fillRect(0, 36, 128, 8); }
     });
     const geo = new THREE.PlaneGeometry(1.3, 0.8, 8, 2); geo.translate(0.65, 0, 0);
-    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.8 }));
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.8, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.18 }));
     m.position.set(x, 4.15, z); m.rotation.y = 0.6; world.add(m);
     flags.push({ geo, base: (geo.attributes.position.array as Float32Array).slice(), ph: rand() * 6 });
+  }
+  /** a string of multicoloured pennants sagging between two points (one instanced mesh per call) */
+  function bunting(a: THREE.Vector3, b: THREE.Vector3, sag: number) {
+    const len = a.distanceTo(b), n = Math.max(3, Math.floor(len / 0.55));
+    const tri = new THREE.BufferGeometry();
+    tri.setAttribute("position", new THREE.Float32BufferAttribute([-0.2, 0, 0, 0.2, 0, 0, 0, -0.42, 0], 3));
+    tri.setAttribute("normal", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
+    const im = new THREE.InstancedMesh(tri, new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, roughness: 0.8, emissive: 0x332222 }), n);
+    const yaw = Math.atan2(b.x - a.x, b.z - a.z) - Math.PI / 2, p = new THREE.Vector3();
+    for (let k = 0; k < n; k++) {
+      const u = (k + 0.5) / n; p.lerpVectors(a, b, u); p.y -= Math.sin(u * Math.PI) * sag;
+      im.setMatrixAt(k, place(p, yaw, 1, (rand() - 0.5) * 0.3));
+      im.setColorAt(k, new THREE.Color(GATE_PALETTE[k % GATE_PALETTE.length]));
+    }
+    im.computeBoundingSphere(); world.add(im);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 13 }, (_, k) => { const u = k / 12; return new THREE.Vector3().lerpVectors(a, b, u).setY(a.y + (b.y - a.y) * u - Math.sin(u * Math.PI) * sag); })), new THREE.LineBasicMaterial({ color: 0x2a2020 }));
+    world.add(line);
   }
 
   /* ------------------------------------------------------ start gantry */
   const startLamps: THREE.MeshStandardMaterial[] = [];
+  const gantryInfo = { a: new THREE.Vector3(), b: new THREE.Vector3(), mid: new THREE.Vector3() };
   function gantry() {
     const i = 0; const g = new THREE.Group(); const c = at(i, 0); g.position.copy(c); g.rotation.y = yawAt(i); world.add(g);
     const xl = T.offL[i] + 0.5, xr = -(T.offR[i] + 0.5), span = xl - xr, cx = (xl + xr) / 2;
+    g.updateMatrixWorld(true);
+    gantryInfo.a.copy(g.localToWorld(new THREE.Vector3(xl - 0.4, 5.4, 0))); gantryInfo.b.copy(g.localToWorld(new THREE.Vector3(xr + 0.4, 5.4, 0)));
+    gantryInfo.mid.copy(g.localToWorld(new THREE.Vector3(cx, 6.4, 0)));
+    // colour LED strips along the top and bottom of the gantry beam
+    const ledMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+    {
+      const segs = 24, geos: THREE.BufferGeometry[] = [];
+      for (const y of [5.48, 7.32]) for (const z of [-0.315, 0.315]) for (let k = 0; k < segs; k++) {
+        const b = new THREE.BoxGeometry((span + 0.3) / segs - 0.04, 0.07, 0.02); b.translate(xr - 0.15 + ((k + 0.5) * (span + 0.3)) / segs, y, z);
+        const col = new THREE.Color(GATE_PALETTE[k % GATE_PALETTE.length]).multiplyScalar(1.6), n = b.attributes.position.count, arr = new Float32Array(n * 3);
+        for (let v = 0; v < n; v++) arr.set([col.r, col.g, col.b], v * 3);
+        b.setAttribute("color", new THREE.BufferAttribute(arr, 3)); geos.push(b);
+      }
+      const merged = mergeGeometries(geos, false)!; geos.forEach((x) => x.dispose());
+      g.add(new THREE.Mesh(merged, ledMat));
+    }
     for (const x of [xl, xr]) {
       for (const dz of [-0.35, 0.35]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, 6.6, 0.16), steelMat); p.position.set(x, 3.3, dz); p.castShadow = true; g.add(p); }
       for (let y = 0.6; y < 6.4; y += 0.8) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.86), steelMat); b.position.set(x, y, 0); b.rotation.x = 0.7; g.add(b); }
@@ -689,6 +761,8 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   interface GateRT {
     spec: GateSpec; s: number; i: number; banner: THREE.MeshStandardMaterial; beam: THREE.MeshBasicMaterial; glow: THREE.MeshBasicMaterial;
     ground: THREE.MeshBasicMaterial; beacon: THREE.MeshStandardMaterial; armed: boolean; prevDs: number; centre: THREE.Vector3;
+    color: THREE.Color; strip: THREE.MeshBasicMaterial; check: THREE.MeshBasicMaterial; flash: number;
+    beamA: THREE.Vector3; beamB: THREE.Vector3; fwd: THREE.Vector3;
   }
   const gates: GateRT[] = [];
   function gateS(n: number): number[] {
@@ -703,39 +777,67 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   function buildGate(spec: GateSpec, n: number, s: number) {
     const i = idxOf(s); const g = new THREE.Group(); const c = at(i, 0); g.position.copy(c); g.rotation.y = yawAt(i); world.add(g);
     const xl = T.offL[i] + 0.4, xr = -(T.offR[i] + 0.4), span = xl - xr, cx = (xl + xr) / 2;
-    const beacon = new THREE.MeshStandardMaterial({ color: 0x221500, emissive: AMBER.clone(), emissiveIntensity: 2 });
+    const raw = /^#?[0-9a-f]{3}([0-9a-f]{3})?$/i.test(spec.color ?? "") ? (spec.color!.startsWith("#") ? spec.color! : `#${spec.color}`) : GATE_PALETTE[(n - 1) % GATE_PALETTE.length];
+    const color = new THREE.Color(raw);
+    const hex = `#${color.getHexString()}`; // normalised 6-digit sRGB for the canvas
+    const beacon = new THREE.MeshStandardMaterial({ color: 0x221500, emissive: color.clone(), emissiveIntensity: 2 });
+    const strip = new THREE.MeshBasicMaterial({ color: color.clone(), toneMapped: false });
     for (const x of [xl, xr]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.36, 6.1, 0.36), darkMat); post.position.set(x, 3.05, 0); post.castShadow = true; g.add(post);
       const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.2, 0.42), hazardMat); sleeve.position.set(x, 0.6, 0); g.add(sleeve);
       const cap = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), beacon); cap.position.set(x, 6.25, 0); g.add(cap);
       const em = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), beacon); em.position.set(x - Math.sign(x) * 0.25, 0.6, 0); g.add(em);
+      // light strips on the inner and both broad faces of each post
+      for (const dz of [-0.185, 0.185]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.07, 4.4, 0.02), strip); st.position.set(x, 3.5, dz); g.add(st); }
+      const si = new THREE.Mesh(new THREE.BoxGeometry(0.02, 4.4, 0.07), strip); si.position.set(x - Math.sign(x) * 0.185, 3.5, 0); g.add(si);
       for (const dz of [-1.4, 1.4]) coneSpots.push(g.localToWorld(new THREE.Vector3(x + Math.sign(x) * 0.5, 0, dz)));
     }
     const tex = canvasTex(1536, 300, (k) => {
       const w = 1536, h = 300;
-      const gr = k.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#1e1914"); gr.addColorStop(1, "#0c0a08"); k.fillStyle = gr; k.fillRect(0, 0, w, h);
-      hazard(k, 0, 0, w, 20); hazard(k, 0, h - 20, w, 20);
-      k.fillStyle = "#ffae1a"; k.fillRect(44, 50, 200, h - 100);
-      k.fillStyle = "#14110d"; k.font = `150px ${STENCIL}`; k.textAlign = "center"; k.textBaseline = "middle"; k.fillText(String(n).padStart(2, "0"), 144, h / 2 + 8);
+      const gr = k.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, "#241a3a"); gr.addColorStop(1, "#120d1e"); k.fillStyle = gr; k.fillRect(0, 0, w, h);
+      // colour wash from the number block
+      const wash = k.createLinearGradient(0, 0, w * 0.75, 0); wash.addColorStop(0, hex + "88"); wash.addColorStop(1, hex + "00"); k.fillStyle = wash; k.fillRect(0, 0, w, h);
+      // top/bottom bands: gate colour with dark diagonal ticks
+      for (const y of [0, h - 22]) {
+        k.save(); k.beginPath(); k.rect(0, y, w, 22); k.clip(); k.fillStyle = hex; k.fillRect(0, y, w, 22);
+        k.fillStyle = "rgba(20,10,30,0.35)"; for (let x = -22; x < w; x += 36) { k.beginPath(); k.moveTo(x, y + 22); k.lineTo(x + 14, y + 22); k.lineTo(x + 36, y); k.lineTo(x + 22, y); k.fill(); }
+        k.restore();
+      }
+      k.fillStyle = hex; k.fillRect(44, 50, 200, h - 100);
+      k.fillStyle = "#140c1c"; k.font = `150px ${STENCIL}`; k.textAlign = "center"; k.textBaseline = "middle"; k.fillText(String(n).padStart(2, "0"), 144, h / 2 + 8);
       let fs = 168; k.font = `${fs}px ${STENCIL}`;
       while (k.measureText(spec.label).width > w - 340 && fs > 50) { fs -= 6; k.font = `${fs}px ${STENCIL}`; }
-      k.fillStyle = "#f4ead6"; k.textAlign = "left"; k.textBaseline = "alphabetic"; k.fillText(spec.label, 284, 182);
-      k.font = `600 42px ${MONO}`; k.fillStyle = "#ffae1a"; setSpacing(k, 9); k.fillText(spec.sub.toUpperCase(), 290, 248);
+      k.fillStyle = "#fff6ea"; k.textAlign = "left"; k.textBaseline = "alphabetic"; k.fillText(spec.label, 284, 182);
+      k.font = `600 42px ${MONO}`; k.fillStyle = hex; setSpacing(k, 9); k.fillText(spec.sub.toUpperCase(), 290, 248);
     });
     const banner = new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4, roughness: 0.65 });
     const bw = span - 0.2, bh = bw / 5.12;
     const frame = new THREE.Mesh(new THREE.BoxGeometry(span + 0.3, bh + 0.25, 0.18), darkMat); frame.position.set(cx, 5.9 - bh / 2, 0); frame.castShadow = true; g.add(frame);
+    // cleared badge: a green disc with a check, sitting on the banner's right end
+    const check = new THREE.MeshBasicMaterial({ map: checkTex, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
     for (const side of [-1, 1]) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), banner); p.position.set(cx, 5.9 - bh / 2, side * 0.1); if (side < 0) p.rotation.y = Math.PI; g.add(p);
+      const ck = new THREE.Mesh(new THREE.PlaneGeometry(bh * 0.78, bh * 0.78), check);
+      ck.position.set(cx + side * (bw / 2 - bh * 0.55), 5.9 - bh / 2, side * 0.115); if (side < 0) ck.rotation.y = Math.PI; g.add(ck);
     }
-    const beam = new THREE.MeshBasicMaterial({ color: AMBER.clone().multiplyScalar(3), transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    const beam = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(3), transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
     const core = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, span - 0.6, 6), beam); core.rotation.z = Math.PI / 2; core.position.set(cx, 0.6, 0); g.add(core);
-    const glow = new THREE.MeshBasicMaterial({ map: beamGlowTex, color: AMBER.clone(), transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const glow = new THREE.MeshBasicMaterial({ map: beamGlowTex, color: color.clone(), transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     for (const rx of [0, Math.PI / 2]) { const gp = new THREE.Mesh(new THREE.PlaneGeometry(span - 0.6, 0.5), glow); gp.position.set(cx, 0.6, 0); gp.rotation.x = rx; g.add(gp); }
-    const ground = new THREE.MeshBasicMaterial({ map: beamGlowTex, color: AMBER.clone(), transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    const ground = new THREE.MeshBasicMaterial({ map: beamGlowTex, color: color.clone(), transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const gpl = new THREE.Mesh(new THREE.PlaneGeometry(span - 0.6, 2.2), ground); gpl.rotation.x = -Math.PI / 2; gpl.position.set(cx, 0.045, 0); g.add(gpl);
-    gates.push({ spec, s, i, banner, beam, glow, ground, beacon, armed: true, prevDs: 0, centre: g.localToWorld(new THREE.Vector3(cx, 2.5, 0)) });
+    gates.push({
+      spec, s, i, banner, beam, glow, ground, beacon, armed: true, prevDs: 0, centre: g.localToWorld(new THREE.Vector3(cx, 2.5, 0)),
+      color, strip, check, flash: 0,
+      beamA: g.localToWorld(new THREE.Vector3(xl - 0.3, 0.6, 0)), beamB: g.localToWorld(new THREE.Vector3(xr + 0.3, 0.6, 0)),
+      fwd: new THREE.Vector3(tx[i], 0, tz[i]),
+    });
   }
+  const checkTex = canvasTex(128, 128, (k) => {
+    k.fillStyle = "#18c060"; k.beginPath(); k.arc(64, 64, 58, 0, Math.PI * 2); k.fill();
+    k.strokeStyle = "#f4fff6"; k.lineWidth = 6; k.beginPath(); k.arc(64, 64, 52, 0, Math.PI * 2); k.stroke();
+    k.lineWidth = 16; k.lineCap = "round"; k.lineJoin = "round"; k.beginPath(); k.moveTo(36, 66); k.lineTo(56, 86); k.lineTo(92, 44); k.stroke();
+  });
   const hazTex = canvasTex(128, 128, (g) => hazard(g, 0, 0, 128, 128, 40));
   const hazardMat = new THREE.MeshStandardMaterial({ map: hazTex, roughness: 0.6 });
 
@@ -772,6 +874,212 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     }
     dGeo.attributes.position.needsUpdate = true; dGeo.attributes.aAge.needsUpdate = true; dGeo.attributes.aSize.needsUpdate = true;
   }
+
+  /* ------------------------------------------- sparks / fireworks / confetti */
+  // pooled CPU-simulated Points; updated only while something is alive
+  interface Pool { emit(p: THREE.Vector3, v: THREE.Vector3, c: THREE.Color, size: number, life: number, drag: number, grav: number): void; update(dt: number, t: number): void; mat: THREE.ShaderMaterial }
+  function makePool(N: number, confetti: boolean): Pool {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), age = new Float32Array(N).fill(2), size = new Float32Array(N), seed = new Float32Array(N);
+    const vel = new Float32Array(N * 3), life = new Float32Array(N).fill(1), drag = new Float32Array(N), grav = new Float32Array(N);
+    for (let i = 0; i < N; i++) seed[i] = Math.random();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("aColor", new THREE.BufferAttribute(col, 3));
+    geo.setAttribute("aAge", new THREE.BufferAttribute(age, 1)); geo.setAttribute("aSize", new THREE.BufferAttribute(size, 1)); geo.setAttribute("aSeed", new THREE.BufferAttribute(seed, 1));
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uScale: { value: H() }, uTime: { value: 0 } },
+      vertexShader: `attribute vec3 aColor; attribute float aAge, aSize, aSeed; uniform float uScale, uTime; varying vec3 vC; varying float vA, vPh;
+        void main(){ vec4 mv = modelViewMatrix*vec4(position,1.); gl_Position = projectionMatrix*mv;
+          float a = clamp(aAge, 0., 1.); vC = aColor; vPh = aSeed*6.283 + uTime*(7. + aSeed*6.);
+          ${confetti ? "vA = step(a, .999) * (1. - smoothstep(.8, 1., a));" : "vA = step(a, .999) * (1. - a) * (1. - a) * (.75 + .25*sin(uTime*40. + aSeed*30.));"}
+          gl_PointSize = min(aSize * uScale / max(-mv.z, .5), uScale * .045); }`,
+      fragmentShader: confetti
+        ? `varying vec3 vC; varying float vA, vPh; void main(){ vec2 c = gl_PointCoord - .5; float w = .08 + .42*abs(sin(vPh)); if (abs(c.x) > w || abs(c.y) > .3 || vA <= 0.) discard; gl_FragColor = vec4(vC * (.75 + .35*abs(cos(vPh))), vA); }`
+        : `varying vec3 vC; varying float vA, vPh; void main(){ vec2 c = gl_PointCoord - .5; float d = dot(c,c); float m = smoothstep(.25, 0., d); m *= m * m; float core = smoothstep(.02, 0., d); gl_FragColor = vec4((vC * 1.4 + core * 1.2) * m * vA, 1.); }`,
+      transparent: true, depthWrite: false, blending: confetti ? THREE.NormalBlending : THREE.AdditiveBlending, fog: false,
+    });
+    const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; scene.add(pts);
+    let head = 0, aliveUntil = -1, clock2 = 0;
+    return {
+      mat,
+      emit(p, v, c, s, l, dg, gv) {
+        const i = head; head = (head + 1) % N;
+        pos.set([p.x, p.y, p.z], i * 3); vel.set([v.x, v.y, v.z], i * 3); col.set([c.r, c.g, c.b], i * 3);
+        age[i] = 0; life[i] = l; size[i] = s; drag[i] = dg; grav[i] = gv;
+        aliveUntil = Math.max(aliveUntil, clock2 + l + 0.1);
+      },
+      update(dt, t) {
+        clock2 += dt; mat.uniforms.uTime.value = t;
+        if (clock2 > aliveUntil) { pts.visible = false; return; }
+        pts.visible = true;
+        for (let i = 0; i < N; i++) {
+          if (age[i] >= 1) continue;
+          age[i] += dt / life[i];
+          const o = i * 3, k = Math.exp(-drag[i] * dt);
+          vel[o] *= k; vel[o + 1] = vel[o + 1] * k - grav[i] * dt; vel[o + 2] *= k;
+          if (confetti) { vel[o] += Math.sin(t * 3 + seed[i] * 20) * 1.5 * dt; vel[o + 2] += Math.cos(t * 2.6 + seed[i] * 17) * 1.5 * dt; }
+          pos[o] += vel[o] * dt; pos[o + 1] += vel[o + 1] * dt; pos[o + 2] += vel[o + 2] * dt;
+          if (pos[o + 1] < 0.03) { pos[o + 1] = 0.03; vel[o + 1] = 0; vel[o] *= 0.5; vel[o + 2] *= 0.5; }
+        }
+        geo.attributes.position.needsUpdate = true; geo.attributes.aAge.needsUpdate = true;
+        geo.attributes.aColor.needsUpdate = true; geo.attributes.aSize.needsUpdate = true;
+      },
+    };
+  }
+  const sparks = makePool(low ? 700 : 1600, false);
+  const confetti = makePool(low ? 180 : 420, true);
+  const vTmp = new THREE.Vector3(), pTmp = new THREE.Vector3(), cTmp = new THREE.Color();
+  const WHITE = new THREE.Color(1, 1, 1), tmpR = new THREE.Vector3();
+
+  // expanding light ring through the gate on a pass (one shared mesh, additive)
+  const ringMat = new THREE.MeshBasicMaterial({ map: undefined, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 48, 1), ringMat); ring.visible = false; scene.add(ring);
+  let ringT = 1; const ringO = new THREE.Vector3(), ringF = new THREE.Vector3();
+  function updateRing(dt: number) {
+    if (ringT >= 1) { ring.visible = false; return; }
+    ringT = Math.min(1, ringT + dt / 0.55);
+    const e = 1 - Math.pow(1 - ringT, 3);
+    ring.visible = true; ring.scale.setScalar(1.2 + e * 5.5); ringMat.opacity = (1 - ringT) * 0.9;
+    ring.position.copy(ringO).addScaledVector(ringF, e * 9); // the shockwave rolls ahead of the car
+  }
+  /** gate burst: sparks spray from the timing beam, mostly up and along the direction of travel */
+  function gateBurst(gt: GateRT) {
+    ring.position.lerpVectors(gt.beamA, gt.beamB, 0.5).setY(2.6); ring.lookAt(tmpR.copy(ring.position).add(gt.fwd)); ringO.copy(ring.position); ringF.copy(gt.fwd);
+    ringMat.color.copy(gt.color).multiplyScalar(2.2); ringT = 0;
+    const n = low ? 80 : 180;
+    for (let k = 0; k < n; k++) {
+      pTmp.lerpVectors(gt.beamA, gt.beamB, Math.random());
+      const a = Math.random() * Math.PI * 2, up = 2.5 + Math.random() * 6.5, out = 1 + Math.random() * 5;
+      vTmp.set(Math.cos(a) * out * 0.5, up, Math.sin(a) * out * 0.5).addScaledVector(gt.fwd, (Math.random() * 0.8 + 0.2) * 5);
+      cTmp.copy(gt.color).lerp(WHITE, Math.random() * 0.35).multiplyScalar(low ? 1.5 : 2.8);
+      sparks.emit(pTmp, vTmp, cTmp, 0.12 + Math.random() * 0.12, 0.7 + Math.random() * 0.5, 1.6, 7);
+    }
+    // a ring of slower embers around the beam centre
+    pTmp.lerpVectors(gt.beamA, gt.beamB, 0.5);
+    for (let k = 0; k < (low ? 24 : 48); k++) {
+      const a = (k / (low ? 24 : 48)) * Math.PI * 2;
+      vTmp.set(-gt.fwd.z * Math.cos(a) * 6, Math.sin(a) * 6 + 2, gt.fwd.x * Math.cos(a) * 6);
+      cTmp.copy(gt.color).multiplyScalar(low ? 1.4 : 2.6);
+      sparks.emit(pTmp, vTmp, cTmp, 0.11, 0.9, 2.6, 2);
+    }
+  }
+  /** one firework shell: a short rising trail then a spherical burst (sometimes two-tone) */
+  type Shell = { t: number; at: THREE.Vector3; c1: THREE.Color; c2: THREE.Color; fired: boolean; burst: boolean };
+  let shells: Shell[] = [];
+  function updateShells(dt: number) {
+    for (const sh of shells) {
+      sh.t -= dt;
+      if (sh.t <= 0.55 && !sh.fired) { sh.fired = true; }
+      if (sh.fired && !sh.burst && sh.t > 0) {
+        // rising trail
+        const u = 1 - sh.t / 0.55;
+        pTmp.set(sh.at.x, sh.at.y * (0.2 + 0.8 * u), sh.at.z);
+        vTmp.set((Math.random() - 0.5) * 0.6, -1, (Math.random() - 0.5) * 0.6);
+        sparks.emit(pTmp, vTmp, cTmp.setRGB(2.2, 1.6, 1.0), 0.22, 0.45, 2, 3);
+      }
+      if (sh.t <= 0 && !sh.burst) {
+        sh.burst = true;
+        const n = low ? 80 : 190, sp = 13 + Math.random() * 6;
+        for (let k = 0; k < n; k++) {
+          // fibonacci sphere for an even shell
+          const y = 1 - (2 * (k + 0.5)) / n, r = Math.sqrt(1 - y * y), th = k * 2.39996;
+          vTmp.set(Math.cos(th) * r, y, Math.sin(th) * r).multiplyScalar(sp * (0.85 + Math.random() * 0.3));
+          cTmp.copy(k % 3 === 0 ? sh.c2 : sh.c1).multiplyScalar(low ? 1.6 : 3.4);
+          const life = 1.3 + Math.random() * 0.7;
+          sparks.emit(sh.at, vTmp, cTmp, 0.5 + Math.random() * 0.3, life, 1.7, 3.6);
+        }
+        flashK = Math.min(1.6, flashK + 0.5);
+        sfx.pop();
+      }
+    }
+    shells = shells.filter((s) => !s.burst || s.t > -0.1);
+  }
+  let flashK = 0;
+
+  /* ------------------------------------------------------------ sound */
+  // all synthesised; the AudioContext is created lazily on the first setSound(true)
+  const sfx = (() => {
+    let ctx: AudioContext | null = null, master: GainNode | null = null, on = false;
+    let eng: { o1: OscillatorNode; o2: OscillatorNode; sub: OscillatorNode; lp: BiquadFilterNode; g: GainNode } | null = null;
+    let noise: AudioBuffer | null = null;
+    const live = () => !!ctx && on && ctx.state === "running";
+    function init() {
+      const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+        ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      try { ctx = new AC(); } catch { ctx = null; return; }
+      const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(ctx.destination);
+      master = ctx.createGain(); master.gain.value = 0; master.connect(comp);
+      // engine: two detuned saws + a soft sine sub, through a low-pass that opens with throttle
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 420; lp.Q.value = 2.2;
+      const g = ctx.createGain(); g.gain.value = 0; lp.connect(g); g.connect(master);
+      const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), sub = ctx.createOscillator();
+      o1.type = "sawtooth"; o2.type = "sawtooth"; sub.type = "sine"; o2.detune.value = 14; o1.detune.value = -9;
+      const g1 = ctx.createGain(), g2 = ctx.createGain(), g3 = ctx.createGain(); g1.gain.value = 0.32; g2.gain.value = 0.26; g3.gain.value = 0.5;
+      o1.connect(g1).connect(lp); o2.connect(g2).connect(lp); sub.connect(g3).connect(lp);
+      for (const o of [o1, o2, sub]) { o.frequency.value = 50; o.start(); }
+      eng = { o1, o2, sub, lp, g };
+      const len = Math.floor(ctx.sampleRate * 0.8); noise = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = noise.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    }
+    function tone(freq: number, t0: number, dur: number, vol: number, type: OscillatorType = "sine", to?: number) {
+      if (!ctx || !master) return;
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.setValueAtTime(freq, t0);
+      if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(master); o.start(t0); o.stop(t0 + dur + 0.05);
+    }
+    function noiseHit(t0: number, dur: number, vol: number, f0: number, f1: number, type: BiquadFilterType = "bandpass") {
+      if (!ctx || !master || !noise) return;
+      const s = ctx.createBufferSource(); s.buffer = noise;
+      const f = ctx.createBiquadFilter(); f.type = type; f.Q.value = 0.9; f.frequency.setValueAtTime(f0, t0); f.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      s.connect(f).connect(g).connect(master); s.start(t0); s.stop(t0 + dur + 0.05);
+    }
+    const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
+    return {
+      set(v: boolean) {
+        on = v;
+        if (v && !ctx) init();
+        if (!ctx || !master) return;
+        if (v) { if (!document.hidden) void ctx.resume(); master.gain.setTargetAtTime(0.12, ctx.currentTime, 0.08); }
+        else { master.gain.setTargetAtTime(0, ctx.currentTime, 0.05); const c = ctx; setTimeout(() => { if (!on && c.state === "running") void c.suspend(); }, 400); }
+      },
+      visibility(hidden: boolean) { if (!ctx) return; if (hidden) void ctx.suspend(); else if (on) void ctx.resume(); },
+      /** called every frame: rpm/throttle/speed drive pitch, filter and level */
+      engine(rpmV: number, thr: number, speed01: number, mute: boolean) {
+        if (!live() || !eng || !ctx) return;
+        const t = ctx.currentTime, f = 34 + (rpmV / 8200) * 96;
+        for (const o of [eng.o1, eng.o2]) o.frequency.setTargetAtTime(f, t, 0.05);
+        eng.sub.frequency.setTargetAtTime(f / 2, t, 0.05);
+        eng.lp.frequency.setTargetAtTime(380 + Math.abs(thr) * 900 + speed01 * 500, t, 0.08);
+        eng.g.gain.setTargetAtTime(mute ? 0 : 0.18 + Math.abs(thr) * 0.32 + speed01 * 0.18, t, mute ? 0.05 : 0.12);
+      },
+      chime(k: number) {
+        if (!live() || !ctx) return;
+        const t = ctx.currentTime, base = 523.25 * Math.pow(2, PENTA[k % PENTA.length] / 12); // climbs a pentatonic step per gate
+        tone(base, t, 0.55, 0.32, "triangle"); tone(base * 2, t, 0.35, 0.06, "sine");
+        tone(base * 1.4983, t + 0.11, 0.9, 0.3, "triangle"); tone(base * 2.9966, t + 0.11, 0.6, 0.05, "sine");
+      },
+      land(impact: number) {
+        if (!live() || !ctx) return;
+        const t = ctx.currentTime, v = clamp(impact / 7, 0.3, 1);
+        noiseHit(t, 0.35, 0.35 * v, 1800, 220); tone(110, t, 0.28, 0.55 * v, "sine", 42);
+      },
+      pop() {
+        if (!live() || !ctx) return;
+        const t = ctx.currentTime;
+        noiseHit(t, 0.5, 0.22, 900, 120, "lowpass"); tone(70 + Math.random() * 30, t, 0.3, 0.25, "sine", 35);
+        for (let i = 0; i < 5; i++) noiseHit(t + 0.15 + Math.random() * 0.5, 0.06, 0.05, 5000, 3000, "highpass");
+      },
+      arpeggio() {
+        if (!live() || !ctx) return;
+        const t = ctx.currentTime, root = 523.25; // C5 major, up and sparkle
+        [0, 4, 7, 12, 16, 19, 24, 19, 24, 28].forEach((st, i) => tone(root * Math.pow(2, st / 12), t + i * 0.085, i === 9 ? 1.4 : 0.45, i === 9 ? 0.22 : 0.18, "triangle"));
+        [0, 4, 7].forEach((st) => tone(root / 2 * Math.pow(2, st / 12), t + 0.85, 1.6, 0.1, "sine"));
+      },
+      dispose() { try { void ctx?.close(); } catch { /* ignore */ } ctx = null; eng = null; },
+    };
+  })();
 
   /* ---------------------------------------------------------- buggy */
   const buggy = opts.createBuggy();
@@ -831,10 +1139,21 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   const cleared: GateId[] = [];
   let rpm = 900, gear = 1, teleT = 0, snapCam = true;
   const nextGate = (): GateRT | null => gates.find((g) => !cleared.includes(g.spec.id)) ?? null;
+  // juice: camera fov kick + shake, gate flash light, finale timer
+  let lastThr = 0, fovKick = 0, shake = 0, celebrateT = 0, gateFlash = 0, celebrateLook = 0, shellCd = 0, confettiAcc = 0;
+  const gateFlashCol = new THREE.Color();
+  function gatePass(gt: GateRT, fresh: boolean) {
+    gt.flash = 1;
+    gateBurst(gt);
+    fovKick = fresh ? 9 : 5; shake = Math.max(shake, fresh ? 0.22 : 0.1);
+    gateFlashCol.copy(gt.color); gateFlash = 1;
+    sfx.chime(Math.max(0, gates.indexOf(gt)));
+  }
 
   /* ---------------------------------------------------------- physics */
   function step(dt: number) {
     const inp = readInput();
+    lastThr = inp.thr;
     if (introMode && (inp.thr !== 0 || inp.steer !== 0 || inp.hb)) introMode = false;
     if (!started && inp.thr !== 0) { started = true; for (const m of startLamps) m.emissive.set(0x20ff60); }
     const fx = Math.sin(car.yaw), fz = Math.cos(car.yaw), rx = -fz, rz = fx;
@@ -894,6 +1213,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       if (car.y <= g) {
         const impact = -car.vy; car.y = g; car.vy = 0; car.air = false;
         body.bobV -= Math.min(1.4, impact * 0.22);
+        if (impact > 2.5) { sfx.land(impact); shake = Math.max(shake, clamp(impact * 0.025, 0, 0.16)); }
         const sp = Math.hypot(car.vx, car.vz);
         for (let k = 0; k < 14; k++) emitDust(car.x, 0.2, car.z, car.vx, car.vz, 1.4 + sp * 0.05);
       }
@@ -918,7 +1238,9 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       const latOk = Math.abs(car.lat) < WALL_D + 0.5;
       if (gt.armed && latOk && Math.abs(d) < 4 && Math.abs(gt.prevDs) < 4 && (d >= 0) !== (gt.prevDs >= 0)) {
         gt.armed = false;
-        if (!cleared.includes(gt.spec.id)) cleared.push(gt.spec.id);
+        const fresh = !cleared.includes(gt.spec.id);
+        if (fresh) cleared.push(gt.spec.id);
+        gatePass(gt, fresh);
         opts.onGate(gt.spec.id);
       }
       if (Math.abs(d) > 4) gt.armed = true;
@@ -976,7 +1298,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       const orbit = tmpA.set(car.x + Math.sin(a) * 8.5, 2.6 + Math.sin(introT * 0.3) * 0.5, car.z + Math.cos(a) * 8.5);
       const wide = tmpB.set(CENTRE.x + 50, 34, CENTRE.z - 46);
       camPos.lerpVectors(wide, orbit, k);
-      camLook.lerpVectors(CENTRE, new THREE.Vector3(car.x, 0.7, car.z), ease(clamp((introT - 1.2) / 4.5, 0, 1)));
+      camLook.lerpVectors(tmpC.set(CENTRE.x, 7, CENTRE.z), new THREE.Vector3(car.x, 0.7, car.z), ease(clamp((introT - 1.2) / 4.5, 0, 1)));
       camYaw = car.yaw;
     } else {
       // look along the velocity when sliding forward, along the nose otherwise
@@ -995,8 +1317,15 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     camPos.y = Math.max(camPos.y, groundY(camPos.x, camPos.z) + 0.6);
     const fovT = (narrow ? 66 : 56) + (introMode ? 0 : 10 * clamp(sp / VMAX, 0, 1));
     fov += (fovT - fov) * damp(3, dt);
-    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
-    camera.position.copy(camPos); camera.lookAt(camLook);
+    // gate "aha": a fast fov punch that springs back, plus a short shake
+    fovKick *= Math.exp(-dt * 6); shake *= Math.exp(-dt * 7);
+    const fovNow = fov + fovKick;
+    if (Math.abs(camera.fov - fovNow) > 0.01) { camera.fov = fovNow; camera.updateProjectionMatrix(); }
+    const free = !camOverride && !introMode;
+    celebrateLook += ((celebrateT > 0 && free ? 1 : 0) - celebrateLook) * damp(1.6, dt);
+    camera.position.copy(camPos);
+    if (free && shake > 0.002) camera.position.add(tmpA.set((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake));
+    camera.lookAt(tmpB.copy(camLook).setY(camLook.y + celebrateLook * 4));
     skyGroup.position.copy(camera.position);
   }
 
@@ -1022,6 +1351,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     const ss = gateS(opts.gates.length);
     opts.gates.forEach((spec, k) => buildGate(spec, k + 1, ss[k]));
     for (let x = -4; x <= 18; x += 5.5) flag(x, -(T.offL[0] + 1.6), [0, 1, 2, 3][Math.round(x) & 3]);
+    for (let x = -4; x + 5.5 <= 18.01; x += 5.5) bunting(new THREE.Vector3(x, 4.58, -(T.offL[0] + 1.6)), new THREE.Vector3(x + 5.5, 4.58, -(T.offL[0] + 1.6)), 0.55);
     for (const s of [118, 132]) { const i = idxOf(s); const p = at(i, T.k[i] > 0 ? -(T.offL[i] + 1.8) : T.offR[i] + 1.8); flag(p.x, p.z, s === 118 ? 0 : 1); }
     finish();
     mergeStatic(world);
@@ -1053,26 +1383,72 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     });
   }
 
-  function updateGates(t: number) {
+  function updateGates(t: number, dt: number) {
     const nx = nextGate();
     for (const g of gates) {
       const isNext = g === nx, isCl = cleared.includes(g.spec.id);
       const pulse = 0.5 + 0.5 * Math.sin(t * 4.2);
+      g.flash = Math.max(0, g.flash - dt * 1.6);
+      const fl = g.flash * g.flash; // eased flash (1 -> 0 over ~0.6 s)
       if (isCl) {
-        g.banner.emissive.setRGB(0.55, 1, 0.65); g.banner.emissiveIntensity = 0.5; g.banner.color.setRGB(0.75, 1, 0.8);
-        g.beam.color.copy(GREEN).multiplyScalar(0.9); g.beam.opacity = 0.4; g.glow.color.copy(GREEN); g.glow.opacity = 0.1;
-        g.ground.color.copy(GREEN); g.ground.opacity = 0.12; g.beacon.emissive.copy(GREEN); g.beacon.emissiveIntensity = 1.6;
+        // cleared: own colour stays (strips, beam), banner gets a fresh-green tint and the check badge
+        g.banner.emissive.setRGB(0.7, 1, 0.78); g.banner.emissiveIntensity = 0.45 + fl * 3; g.banner.color.setRGB(0.85, 1, 0.88);
+        g.beam.color.copy(g.color).multiplyScalar(1.1 + fl * 6); g.beam.opacity = 0.5; g.glow.color.copy(g.color); g.glow.opacity = 0.14 + fl * 0.8;
+        g.ground.color.copy(g.color); g.ground.opacity = 0.14 + fl * 0.8; g.beacon.emissive.copy(GREEN); g.beacon.emissiveIntensity = 1.8 + fl * 6;
+        g.strip.color.copy(g.color).multiplyScalar(0.9 + fl * 3);
+        g.check.opacity = Math.min(1, g.check.opacity + dt * 3);
       } else if (isNext) {
-        g.banner.emissive.setRGB(1, 0.86, 0.62); g.banner.emissiveIntensity = 0.75 + pulse * 0.55; g.banner.color.setRGB(1, 1, 1);
-        g.beam.color.copy(AMBER).multiplyScalar(2.5 + pulse * 2.5); g.beam.opacity = 1; g.glow.color.copy(AMBER); g.glow.opacity = 0.55 + pulse * 0.4;
-        g.ground.color.copy(AMBER); g.ground.opacity = 0.45 + pulse * 0.4; g.beacon.emissive.copy(AMBER); g.beacon.emissiveIntensity = 2 + pulse * 5;
+        g.banner.emissive.setRGB(1, 0.95, 0.9); g.banner.emissiveIntensity = 0.75 + pulse * 0.6 + fl * 3; g.banner.color.setRGB(1, 1, 1);
+        g.beam.color.copy(g.color).multiplyScalar(2.5 + pulse * 3); g.beam.opacity = 1; g.glow.color.copy(g.color); g.glow.opacity = 0.55 + pulse * 0.45;
+        g.ground.color.copy(g.color); g.ground.opacity = 0.5 + pulse * 0.45; g.beacon.emissive.copy(g.color); g.beacon.emissiveIntensity = 2.5 + pulse * 5;
+        g.strip.color.copy(g.color).multiplyScalar(1.4 + pulse * 2.2);
+        g.check.opacity = 0;
       } else {
-        g.banner.emissive.setRGB(1, 0.9, 0.75); g.banner.emissiveIntensity = 0.3; g.banner.color.setRGB(0.85, 0.85, 0.85);
-        g.beam.color.copy(AMBER).multiplyScalar(1.2); g.beam.opacity = 0.45; g.glow.color.copy(AMBER); g.glow.opacity = 0.18;
-        g.ground.color.copy(AMBER); g.ground.opacity = 0.15; g.beacon.emissive.copy(AMBER); g.beacon.emissiveIntensity = 0.9;
+        g.banner.emissive.setRGB(1, 0.95, 0.9); g.banner.emissiveIntensity = 0.35 + fl * 3; g.banner.color.setRGB(0.9, 0.9, 0.9);
+        g.beam.color.copy(g.color).multiplyScalar(1.3 + fl * 6); g.beam.opacity = 0.5; g.glow.color.copy(g.color); g.glow.opacity = 0.2 + fl * 0.8;
+        g.ground.color.copy(g.color); g.ground.opacity = 0.18 + fl * 0.8; g.beacon.emissive.copy(g.color); g.beacon.emissiveIntensity = 1.2;
+        g.strip.color.copy(g.color).multiplyScalar(0.9 + fl * 3);
+        g.check.opacity = 0;
       }
     }
-    if (nx) { gateLight.position.copy(nx.centre); gateLight.intensity = 14 + 10 * Math.sin(t * 4.2); } else gateLight.intensity = 0;
+    gateFlash = Math.max(0, gateFlash - dt * 1.8);
+    if (gateFlash > 0.01) { gateLight.color.copy(gateFlashCol); gateLight.position.copy(tmpC.set(car.x, 2.5, car.z)); gateLight.intensity = 60 * gateFlash * gateFlash; }
+    else if (nx) { gateLight.color.copy(nx.color); gateLight.position.copy(nx.centre); gateLight.intensity = 14 + 10 * Math.sin(t * 4.2); }
+    else gateLight.intensity = 0;
+  }
+  const tmpC = new THREE.Vector3();
+  function spawnShell(delay: number) {
+    const f = tmpC.set(tx[0], 0, tz[0]), r = { x: -tz[0], z: tx[0] };
+    const d = 12 + Math.random() * 22, side = (Math.random() - 0.5) * 34;
+    const at3 = gantryInfo.mid.clone().addScaledVector(f, d); at3.x += r.x * side; at3.z += r.z * side; at3.y = 11 + Math.random() * 10;
+    const c1 = new THREE.Color(GATE_PALETTE[Math.floor(Math.random() * GATE_PALETTE.length)]);
+    const c2 = Math.random() < 0.5 ? c1.clone() : new THREE.Color(GATE_PALETTE[Math.floor(Math.random() * GATE_PALETTE.length)]);
+    shells.push({ t: 0.55 + delay, at: at3, c1, c2, fired: false, burst: false });
+  }
+  function updateCelebrate(dt: number, t: number) {
+    flashK = Math.max(0, flashK - dt * 2.5);
+    const dimU = skyMat.uniforms.uDim;
+    dimU.value += ((celebrateT > 0.8 ? 0.85 : 0) - dimU.value) * damp(celebrateT > 0.8 ? 2.2 : 0.8, dt);
+    if (celebrateT > 0) {
+      celebrateT -= dt;
+      shellCd -= dt;
+      if (shellCd <= 0 && celebrateT > 1.0) { spawnShell(0); if (!low && Math.random() < 0.35) spawnShell(0.12); shellCd = 0.3 + Math.random() * 0.35; }
+      if (celebrateT > 2.6) {
+        confettiAcc += dt * (low ? 70 : 160);
+        while (confettiAcc >= 1) {
+          confettiAcc -= 1;
+          pTmp.lerpVectors(gantryInfo.a, gantryInfo.b, Math.random()); pTmp.y += 1.95;
+          vTmp.set((Math.random() - 0.5) * 3, 1 + Math.random() * 2.5, (Math.random() - 0.5) * 3);
+          cTmp.set(GATE_PALETTE[Math.floor(Math.random() * GATE_PALETTE.length)]);
+          confetti.emit(pTmp, vTmp, cTmp, 0.13 + Math.random() * 0.06, 3 + Math.random() * 1.5, 1.6, 2.4);
+        }
+      }
+      const on = Math.floor(t * 7) % 2 === 0;
+      startLamps.forEach((m, k) => m.emissive.set(on !== (k % 2 === 1) ? 0x20ff60 : 0x022a08));
+      if (celebrateT <= 0) for (const m of startLamps) m.emissive.set(0x20ff60);
+    }
+    updateShells(dt); updateRing(dt);
+    sparks.update(dt, t); confetti.update(dt, t);
   }
   function updateFlags(t: number) {
     for (const f of flags) {
@@ -1107,8 +1483,13 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     buggy.root.rotation.set(-(body.pitch + body.accP), 0, body.roll);
     moon.position.set(car.x + MOON_DIR.x * 40, MOON_DIR.y * 40, car.z + MOON_DIR.z * 40); moon.target.position.set(car.x, 0, car.z);
     updateCamera(dt);
-    updateGates(t);
+    updateGates(t, dt);
     updateFlags(t);
+    // effects keep running while paused (React may pause behind a finale overlay)
+    updateCelebrate(dt, t);
+    skyMat.uniforms.uTime.value = t;
+    sfx.engine(rpm, paused ? 0 : lastThr, clamp(Math.hypot(car.vx, car.vz) / VMAX, 0, 1), paused);
+    if (!low) bloom.strength = 0.5 + flashK * 0.35 + gateFlash * 0.25;
     teleAcc += dt; teleT += dt;
     if (teleAcc >= 0.1) { teleAcc = 0; sendTelemetry(); }
     if (debug) renderer.info.reset();
@@ -1121,12 +1502,12 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   const onResize = () => {
     camera.aspect = W() / H(); camera.updateProjectionMatrix();
     renderer.setSize(W(), H()); composer.setSize(W(), H()); bloom.setSize(W(), H());
-    dustMat.uniforms.uScale.value = H() * renderer.getPixelRatio();
+    dustMat.uniforms.uScale.value = sparks.mat.uniforms.uScale.value = confetti.mat.uniforms.uScale.value = H() * renderer.getPixelRatio();
   };
-  dustMat.uniforms.uScale.value = H() * renderer.getPixelRatio();
+  dustMat.uniforms.uScale.value = sparks.mat.uniforms.uScale.value = confetti.mat.uniforms.uScale.value = H() * renderer.getPixelRatio();
   const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null;
   ro?.observe(container); window.addEventListener("resize", onResize);
-  const onVis = () => { const was = running; running = !document.hidden; if (running && !was && !disposed) { clock.getDelta(); frame(); } };
+  const onVis = () => { sfx.visibility(document.hidden); const was = running; running = !document.hidden; if (running && !was && !disposed) { clock.getDelta(); frame(); } };
   document.addEventListener("visibilitychange", onVis);
 
   if (debug) {
@@ -1150,10 +1531,14 @@ export function createTrack(opts: TrackOptions): TrackAPI {
             touch = { throttle: Math.abs(err) < 0.35 ? 1 : 0.35, steer: clamp(-err * 2.6, -1, 1), brake: false };
           }
           introT += 1 / 60; step(1 / 60); updateDust(1 / 60); updateCamera(1 / 60);
+          updateGates(introT, 1 / 60); updateCelebrate(1 / 60, introT);
           teleAcc += 1 / 60; if (teleAcc >= 0.1) { teleAcc = 0; sendTelemetry(); }
         }
         if (auto) touch = { throttle: 0, steer: 0, brake: false };
       },
+      /** step only the effects (bursts, fireworks, confetti, flashes) without moving the car */
+      fx(sec: number) { const n = Math.round(sec * 60); for (let k = 0; k < n; k++) { introT += 1 / 60; updateGates(introT, 1 / 60); updateCelebrate(1 / 60, introT); updateCamera(1 / 60); } },
+      celebrate: () => api.celebrate(),
       sceneTris,
       renderer, scene, camera, car,
       setCam(pos: [number, number, number] | null, look?: [number, number, number]) { camOverride = pos ? { pos: new THREE.Vector3(...pos), look: new THREE.Vector3(...(look ?? [0, 0, 0])) } : null; },
@@ -1163,7 +1548,16 @@ export function createTrack(opts: TrackOptions): TrackAPI {
 
   const api: TrackAPI = {
     setInput(i) { touch = { throttle: i.throttle || 0, steer: i.steer || 0, brake: !!i.brake }; },
-    setPaused(p) { paused = p; if (p) keys.clear(); },
+    setPaused(p) { paused = p; if (p) keys.clear(); sfx.engine(rpm, 0, 0, p); },
+    celebrate() {
+      ready.then(() => {
+        if (disposed) return;
+        celebrateT = 6.2; shellCd = 0.25; confettiAcc = 0; flashK = 1;
+        spawnShell(0); spawnShell(0.25); if (!low) spawnShell(0.45);
+        sfx.arpeggio();
+      });
+    },
+    setSound(on) { if (!disposed) sfx.set(!!on); },
     resetCar() { ready.then(() => { placeCar(L - 5); introMode = false; }); },
     teleportToGate(id) {
       ready.then(() => {
@@ -1173,11 +1567,12 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     },
     dispose() {
       disposed = true; running = false; cancelAnimationFrame(raf);
+      sfx.dispose();
       window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", onBlur);
       window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVis); ro?.disconnect();
       scene.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (m.isMesh || (o as THREE.Points).isPoints || (o as THREE.Sprite).isSprite) {
+        if (m.isMesh || (o as THREE.Points).isPoints || (o as THREE.Sprite).isSprite || (o as THREE.Line).isLine) {
           m.geometry?.dispose();
           (Array.isArray(m.material) ? m.material : [m.material]).forEach((x) => x?.dispose());
         }

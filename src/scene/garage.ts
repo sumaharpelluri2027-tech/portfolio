@@ -31,8 +31,10 @@ export interface GarageOptions {
   quality?: "high" | "low";
 }
 
+export type ZoneId = "car" | "bench" | "wall" | "shelf" | "board";
 export interface GarageAPI {
   focus(id: StationId | null): void;
+  goZone(z: ZoneId): void;
   setXray(on: boolean): void;
   bindLabel(id: string, el: HTMLElement | null): void;
   startIntro(): void;
@@ -123,7 +125,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   let loaded = 0, total = 0;
   manager.onStart = (_u, l, t) => { loaded = l; total = t; };
   manager.onProgress = (_u, l, t) => { loaded = l; total = t; opt.onProgress?.(t ? l / t : 0); };
-  new RGBELoader(manager).load(asset("hdr/small_workshop_1k.hdr"), (hdr) => {
+  new RGBELoader(manager).load(asset("hdr/small_workshop_512.hdr"), (hdr) => {
     const env = pmrem.fromEquirectangular(hdr).texture; scene.environment = env; hdr.dispose();
   });
   (scene as unknown as { environmentIntensity: number }).environmentIntensity = 0.0;
@@ -602,6 +604,20 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     }
   }
 
+  /* ---------- zones: walk around the garage ---------- */
+  function goZone(z: ZoneId) {
+    focused = null;
+    if (z === "car") { flyTo(HOME()); return; }
+    const n = narrow();
+    const Z: Record<Exclude<ZoneId, "car">, { pos: [number, number, number]; target: [number, number, number] }> = {
+      bench: { pos: n ? [-1.0, 2.0, 1.0] : [-1.3, 1.85, -0.4], target: [-3.3, 1.2, -3.6] },
+      wall: { pos: n ? [0.6, 2.0, 2.4] : [0.6, 1.95, 0.9], target: [0.6, 1.95, -4.2] },
+      shelf: { pos: n ? [2.2, 1.9, 1.4] : [2.5, 1.8, 0.1], target: [4.7, 1.35, -3.6] },
+      board: { pos: n ? [-2.2, 2.0, 2.6] : [-2.9, 2.0, 1.4], target: [-6.3, 1.9, 0.9] },
+    };
+    flyTo({ pos: new THREE.Vector3(...Z[z].pos), target: new THREE.Vector3(...Z[z].target) }, 1.4);
+  }
+
   /* ---------- labels ---------- */
   const labels = new Map<string, HTMLElement>();
   function bindLabel(id: string, node: HTMLElement | null) { if (node) labels.set(id, node); else labels.delete(id); }
@@ -689,7 +705,8 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     placeLabels();
     raf = QA ? (window.setTimeout(frame, 1500) as unknown as number) : requestAnimationFrame(frame);
   }
-  ready.then(() => { frame(); });
+  frame(); // start drawing immediately; props stream in as they load
+  void ready;
   // render a black first frame immediately
   renderer.render(scene, camera);
 
@@ -704,7 +721,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   void loaded; void total;
 
   return {
-    focus, setXray, bindLabel, startIntro,
+    focus, setXray, bindLabel, startIntro, goZone,
     dispose() {
       running = false; cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVis);

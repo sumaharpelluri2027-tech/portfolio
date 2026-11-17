@@ -23,24 +23,24 @@ export const PROJECTS: Project[] = [
   { id: "boardiq", title: "BoardIQ", kind: "live", status: "Live", hot: true, where: "MU · AI in Business capstone",
     what: "An investment decision platform that checks whether your data can be trusted before its AI gives a verdict, then shows the full reasoning chain and a board memo.",
     mine: "Designed and built it end to end: 12 screens, Gemini reasoning, React + TypeScript on Render.",
-    number: "12 screens", href: LINKS.boardiq, cta: "Open BoardIQ", img: "img/boardiq.jpg" },
+    number: "12 screens", href: LINKS.boardiq, cta: "Open BoardIQ", img: "img/boardiq.webp" },
   { id: "nutrisathi", title: "NutriSathi (FoodTruth AI)", kind: "live", status: "Live", hot: true, where: "MU · AI business project",
-    what: "Scan a packaged food and see what you're actually buying: claims, ingredients and nutrition explained, for fitness-focused buyers.",
+    what: "Checks a food against where you bought it and your own blood report, so you know if it suits your body.",
     mine: "Built and shipped it on Next.js, Supabase and Vercel, with small improvements going live daily.",
-    href: "https://nutrisathi.app", cta: "Open NutriSathi" },
+    href: "https://nutrisathi.app", cta: "Open NutriSathi", img: "img/nutrisathi.webp" },
   { id: "wing-site", title: "AI & Analytics Wing website", kind: "live", status: "Live", where: "MU · AI & Analytics Wing",
     what: "The Wing's public home: an editorial story, a decision game and the team network with custom Canvas visuals.",
-    mine: "Designed and built every version myself.", number: "14 versions", href: LINKS.wing, cta: "Visit the site", img: "img/aiaw-site.jpg" },
+    mine: "Designed and built every version myself.", number: "14 versions", href: LINKS.wing, cta: "Visit the site", img: "img/aiaw-site.webp" },
   { id: "decco", title: "Decco Store", kind: "live", status: "₹3L in 30 days", hot: true, where: "MU · venture, with a team",
     what: "A vintage-inspired home and speaker brand, sold online and at our own stall.",
     mine: "Shopify setup, the Lovable storefront, the product catalogue, pricing and campaigns, then selling in person.",
-    number: "₹3L revenue, first 30 days", href: LINKS.decco, cta: "Visit the store", img: "img/decco-shot.jpg" },
+    number: "₹3L revenue, first 30 days", href: LINKS.decco, cta: "Visit the store", img: "img/decco-shot.webp" },
   { id: "fitgenie", title: "FitGenie AI", kind: "live", status: "Live", where: "Side build",
     what: "Personalised nutrition and workout plans, progress tracking and fitness discovery in one loop.",
-    mine: "Product and build.", href: "https://fitgenie-ai-buddy.lovable.app", cta: "Try it", img: "img/fitgenie.jpg" },
+    mine: "Product and build.", href: "https://fitgenie-ai-buddy.lovable.app", cta: "Try it", img: "img/fitgenie.webp" },
   { id: "shopper", title: "Smart Shopper AI", kind: "live", status: "Live", where: "Side build",
     what: "Compares price, seller trust, card offers and delivery speed across e-commerce and quick commerce.",
-    mine: "Product and build.", href: "https://shopper-smartly.lovable.app", cta: "Try it", img: "img/shopper.jpg" },
+    mine: "Product and build.", href: "https://shopper-smartly.lovable.app", cta: "Try it", img: "img/shopper.webp" },
 
   // ---------- case competitions ----------
   { id: "arogya", title: "Arogya · The Ken's Great Rewiring", kind: "case", status: "Round 2 shortlist", hot: true, where: "The Ken Case Competition 2026",
@@ -93,12 +93,12 @@ export const PROJECTS: Project[] = [
   { id: "snip", title: "Snip", kind: "proto", status: "Prototype", where: "Venture",
     what: "A marketplace and CRM connecting people with tailors, boutiques and designers across India.", mine: "Built the first prototype on Lovable." },
   { id: "brew", title: "Brew Home", kind: "proto", status: "Prototype", where: "Side build",
-    what: "A specialty Indian coffee storefront with a flavour quiz that recommends a roast, plus subscriptions.", mine: "Product and build.", img: "img/brewhome.jpg" },
+    what: "A specialty Indian coffee storefront with a flavour quiz that recommends a roast, plus subscriptions.", mine: "Product and build.", img: "img/brewhome.webp" },
 
   // ---------- leadership ----------
   { id: "wing", title: "VP, AI & Analytics Wing", kind: "lead", status: "Elected", hot: true, where: "Masters' Union",
     what: "Running the Wing: events, case challenges, recruitment and partnerships.",
-    mine: "Ran the event \"Turning Business Challenges into AI Opportunities\" with a QR feedback system, and built the core-team recruitment workbook.", img: "img/aiaw-event.jpg" },
+    mine: "Ran the event \"Turning Business Challenges into AI Opportunities\" with a QR feedback system, and built the core-team recruitment workbook.", img: "img/aiaw-event.webp" },
   { id: "film", title: "The campaign film", kind: "lead", status: "AI film", where: "Wing election",
     what: "My first AI film, made with Google Flow: the campaign that got me elected VP of the Wing.", mine: "Wrote and generated it.", href: LINKS.film, cta: "Watch on YouTube" },
   { id: "campaigns", title: "FOCOS & Google Fraternity campaigns", kind: "lead", status: "Campaigns", where: "Masters' Union",
@@ -106,3 +106,34 @@ export const PROJECTS: Project[] = [
 ];
 
 export const count = (k: Kind | "all") => (k === "all" ? PROJECTS.length : PROJECTS.filter((p) => p.kind === k).length);
+
+/* ---------------- hero projects: the ones worth a deep conversation ---------------- */
+export interface Hero {
+  id: string; title: string; kicker: string; scope: "Solo build" | "Team project" | "As VP, with the Wing";
+  stat: string; statLabel: string; accent: string;
+  beats: { problem: string; did: string; result: string };
+  img?: string; img2?: string; href?: string; cta?: string; stack: string[];
+  ask: string;                       // the question pre-filled into "Ask me about this"
+}
+export const HEROES: Hero[] = [
+  { id: "boardiq", title: "BoardIQ", kicker: "AI decision platform · live", scope: "Solo build", stat: "9 steps", statLabel: "from objective to board memo", accent: "#f2b705",
+    beats: { problem: "Investors are asked to trust AI verdicts they can't inspect.", did: "Built a platform that checks your data before the AI reasons, then shows its full chain.", result: "Live on Render; my AI in Business capstone." },
+    img: "img/boardiq.webp", href: LINKS.boardiq, cta: "Open BoardIQ", stack: ["Gemini 2.5", "React", "TypeScript", "Express"],
+    ask: "How does BoardIQ decide whether data can be trusted before the AI gives a verdict?" },
+  { id: "nutrisathi", title: "NutriSathi", kicker: "Food-label AI · live", scope: "Solo build", stat: "Live", statLabel: "shipping improvements daily", accent: "#c6f24e",
+    beats: { problem: "Food labels don't tell you if this food, from this store, suits your body.", did: "Built an app that checks a food against where you bought it and your own blood report.", result: "Live at nutrisathi.app." },
+    img: "img/nutrisathi.webp", href: "https://nutrisathi.app", cta: "Open NutriSathi", stack: ["Next.js", "Supabase", "Vercel", "AI"],
+    ask: "What is NutriSathi and who is it for?" },
+  { id: "decco", title: "Decco Store", kicker: "D2C venture · sold in person", scope: "Team project", stat: "₹3L", statLabel: "revenue in the first 30 days", accent: "#ff8a65",
+    beats: { problem: "Sell a vintage speaker and home brand nobody had heard of.", did: "Set up Shopify and the Lovable storefront, the catalogue, pricing and campaigns, then sold at our stall.", result: "₹3 lakh in 30 days." },
+    img: "img/decco-shot.webp", img2: "img/decco-stall.webp", href: LINKS.decco, cta: "Visit the store", stack: ["Shopify", "Lovable", "Pricing", "Campaigns"],
+    ask: "What did you personally do at Decco Store, and how did it reach ₹3 lakh?" },
+  { id: "arogya", title: "Arogya", kicker: "Agentic AI · The Ken's Great Rewiring", scope: "Team project", stat: "Round 2", statLabel: "shortlisted nationally", accent: "#7fc8ff",
+    beats: { problem: "A parent in another city runs out of medicine, and nobody notices in time.", did: "Designed an AI agent that tracks and reorders medicine and keeps the family in the loop.", result: "Shortlisted for Round 2 of The Ken's case competition." },
+    stack: ["Agent design", "Product strategy", "Healthcare"],
+    ask: "Tell me about Arogya and your Round 2 entry in The Ken's case competition." },
+  { id: "wing", title: "AI & Analytics Wing", kicker: "Leadership · Masters' Union", scope: "As VP, with the Wing", stat: "4", statLabel: "Case Union problem statements shortlisted", accent: "#b48cff",
+    beats: { problem: "Students treat AI as a buzzword in strategy cases.", did: "Led Case Union 4.0 problem statements that make teams design real AI systems; built the Wing's site and hiring workbook.", result: "4 problem statements shortlisted nationally." },
+    img: "img/aiaw-site.webp", img2: "img/aiaw-event.webp", href: LINKS.wing, cta: "The Wing's site", stack: ["Leadership", "Events", "Web build"],
+    ask: "What have you done as VP of the AI & Analytics Wing?" },
+];

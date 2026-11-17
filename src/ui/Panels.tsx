@@ -175,7 +175,7 @@ export function Crew() {
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <p className="text-[15px] text-paper/85">Elected VP of the AI & Analytics Wing at Masters' Union. I run the crew: events, case challenges, recruitment and the Wing's own website.</p>
         <div className="mt-4 grid grid-cols-2 gap-2">
-          {([["img/aiaw-event.jpg", "Wing event, a full room"], ["img/aiaw-team.jpg", "The Wing's core team"], ["img/aiaw-site.jpg", "The Wing's website, built by me"]] as const).map(([src, cap], i) => (
+          {([["img/aiaw-event.webp", "Wing event, a full room"], ["img/aiaw-team.webp", "The Wing's core team"], ["img/aiaw-site.webp", "The Wing's website, built by me"]] as const).map(([src, cap], i) => (
             <figure key={src} className={`relative overflow-hidden rounded-md bg-black ${i === 0 ? "col-span-2 aspect-[16/9]" : "aspect-square"}`} style={{ transform: `rotate(${[-1, 1.5, -2][i]}deg)` }}>
               <img src={A(src)} alt={cap} className="h-full w-full object-cover" loading="lazy" />
               <figcaption className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-2 py-0.5 font-mono text-[10px]">{cap}</figcaption>
@@ -377,9 +377,9 @@ export function Decco() {
       <Head k="DECCO STORE · VENTURE" t="A BRAND WE SOLD BY HAND" />
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="grid grid-cols-2 gap-2">
-          <img src={A("img/decco-stall.jpg")} alt="Running the Decco Store stall" className="aspect-square w-full rounded-md object-cover" />
-          <img src={A("img/decco-team.jpg")} alt="Team Decco at the market" className="aspect-square w-full rounded-md object-cover" />
-          <img src={A("img/decco-shot.jpg")} alt="The Decco Store website" className="col-span-2 aspect-[16/8] w-full rounded-md object-cover object-top" />
+          <img src={A("img/decco-stall.webp")} alt="Running the Decco Store stall" className="aspect-square w-full rounded-md object-cover" />
+          <img src={A("img/decco-team.webp")} alt="Team Decco at the market" className="aspect-square w-full rounded-md object-cover" />
+          <img src={A("img/decco-shot.webp")} alt="The Decco Store website" className="col-span-2 aspect-[16/8] w-full rounded-md object-cover object-top" />
         </div>
         <div className="mt-4 rounded-md border border-hazard/40 p-4"><div className="font-stencil text-4xl text-hazard">₹3L</div><div className="text-sm text-paper/75">revenue in the first 30 days</div></div>
         <p className="mt-4 text-[15px] text-paper/85">A vintage-inspired home and speaker brand, built with a team at Masters' Union. I handled the Shopify setup, the Lovable storefront, the product catalogue and pricing, ran the campaigns, then sold in person at our stall.</p>

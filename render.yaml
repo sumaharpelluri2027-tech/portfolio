@@ -4,3 +4,16 @@ services:
     runtime: static
     buildCommand: npm ci && npm run build
     staticPublishPath: ./out
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=604800
+      - path: /models/*
+        name: Cache-Control
+        value: public, max-age=2592000
+      - path: /tex/*
+        name: Cache-Control
+        value: public, max-age=2592000
+      - path: /hdr/*
+        name: Cache-Control
+        value: public, max-age=2592000

@@ -1,5 +1,7 @@
 export const A = (p: string) => `assets/${p}`;
 export const EMAIL = "sumahar.pelluri2027@mastersunion.org";
+/** WhatsApp number with country code, digits only (e.g. "919876543210"). Empty hides the WhatsApp button. */
+export const WHATSAPP = "";
 export const LINKS = {
   linkedin: "https://www.linkedin.com/in/sumahar-pelluri-53025b170/",
   github: "https://github.com/sumaharpelluri2027-tech",
@@ -45,12 +47,12 @@ export const FLOW = [
 
 export type Product = { name: string; tag: string; status: string; live: boolean; img?: string; href?: string; d: string; cta?: string };
 export const PRODUCTS: Product[] = [
-  { name: "AI & Analytics Wing", tag: "Community platform", status: "Live", live: true, img: "img/aiaw-site.jpg", href: LINKS.wing, cta: "Visit the site", d: "The Wing's public home: an editorial story, a decision game and the team network with custom Canvas visuals. 14 versions, designed and built by me." },
-  { name: "Decco Store", tag: "D2C commerce", status: "₹3L in 30 days", live: true, img: "img/decco-shot.jpg", href: LINKS.decco, cta: "Visit the store", d: "A vintage-inspired home brand. I picked the products, set prices, built the store and campaigns, then sold in person at our stall." },
-  { name: "FitGenie AI", tag: "AI health", status: "Live", live: true, img: "img/fitgenie.jpg", href: "https://fitgenie-ai-buddy.lovable.app", cta: "Try it", d: "Personalised nutrition and workout plans, progress tracking and fitness discovery in one loop." },
-  { name: "Smart Shopper AI", tag: "Commerce intelligence", status: "Live", live: true, img: "img/shopper.jpg", href: "https://shopper-smartly.lovable.app", cta: "Try it", d: "Compares price, seller trust, card offers and delivery speed across e-commerce and quick commerce." },
+  { name: "AI & Analytics Wing", tag: "Community platform", status: "Live", live: true, img: "img/aiaw-site.webp", href: LINKS.wing, cta: "Visit the site", d: "The Wing's public home: an editorial story, a decision game and the team network with custom Canvas visuals. 14 versions, designed and built by me." },
+  { name: "Decco Store", tag: "D2C commerce", status: "₹3L in 30 days", live: true, img: "img/decco-shot.webp", href: LINKS.decco, cta: "Visit the store", d: "A vintage-inspired home brand. I picked the products, set prices, built the store and campaigns, then sold in person at our stall." },
+  { name: "FitGenie AI", tag: "AI health", status: "Live", live: true, img: "img/fitgenie.webp", href: "https://fitgenie-ai-buddy.lovable.app", cta: "Try it", d: "Personalised nutrition and workout plans, progress tracking and fitness discovery in one loop." },
+  { name: "Smart Shopper AI", tag: "Commerce intelligence", status: "Live", live: true, img: "img/shopper.webp", href: "https://shopper-smartly.lovable.app", cta: "Try it", d: "Compares price, seller trust, card offers and delivery speed across e-commerce and quick commerce." },
   { name: "Priya", tag: "AI voice agent", status: "In build", live: false, d: "A two-way call agent for a dropshipping business, on Bolna with a Fish Audio cloned voice, designed with the human handoff first." },
-  { name: "Brew Home", tag: "D2C prototype", status: "Prototype", live: false, img: "img/brewhome.jpg", d: "A specialty Indian coffee storefront with a flavour quiz that recommends a roast, plus subscriptions." },
+  { name: "Brew Home", tag: "D2C prototype", status: "Prototype", live: false, img: "img/brewhome.webp", d: "A specialty Indian coffee storefront with a flavour quiz that recommends a roast, plus subscriptions." },
 ];
 
 export type Bar = { l: string; was?: number; v: number; b: string };
@@ -88,10 +90,10 @@ export const EDU = [
 ];
 
 export const GALLERY = [
-  ["img/aiaw-event.jpg", "Wing internal event, a full room"],
-  ["img/aiaw-team.jpg", "The Wing's core team"],
-  ["img/decco-stall.jpg", "Running the Decco stall"],
-  ["img/decco-team.jpg", "Team Decco at the market"],
+  ["img/aiaw-event.webp", "Wing internal event, a full room"],
+  ["img/aiaw-team.webp", "The Wing's core team"],
+  ["img/decco-stall.webp", "Running the Decco stall"],
+  ["img/decco-team.webp", "Team Decco at the market"],
 ] as const;
 
 export const WING = [

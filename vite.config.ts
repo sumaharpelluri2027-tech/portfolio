@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === "artifact" ? "dist-artifact" : "dist",
     copyPublicDir: mode !== "artifact",
+    rollupOptions: mode === "artifact" ? undefined : { output: { manualChunks: { three: ["three"], ui: ["react", "react-dom", "framer-motion"] } } },
     chunkSizeWarningLimit: 1200,
   },
 }));

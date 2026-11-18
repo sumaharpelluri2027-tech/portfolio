@@ -26,6 +26,8 @@ export interface TrackOptions {
 export interface TrackAPI {
   setInput(i: { throttle: number; steer: number; brake: boolean }): void;
   setPaused(p: boolean): void;
+  /** let the car drive itself round the lap */
+  setAuto(on: boolean): void;
   resetCar(): void;
   teleportToGate(id: GateId): void;
   dispose(): void;
@@ -1127,7 +1129,13 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   const onKeyUp = (e: KeyboardEvent) => { keys.delete(e.code); };
   const onBlur = () => keys.clear();
   window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp); window.addEventListener("blur", onBlur);
+  let autopilot = false, stuckT = 0;
   function readInput() {
+    const man = touch.throttle !== 0 || touch.steer !== 0 || touch.brake || keys.size > 0;
+    if (autopilot && !man) {
+      const i2 = (car.idx + 26) % NS, want = Math.atan2(px[i2] - car.x, pz[i2] - car.z), err = wrapAngle(want - car.yaw);
+      return { thr: Math.abs(err) < 0.35 ? 0.85 : 0.35, steer: clamp(-err * 2.6, -1, 1), hb: false };
+    }
     if (touch.throttle !== 0 || touch.steer !== 0 || touch.brake) return { thr: clamp(touch.throttle, -1, 1), steer: clamp(touch.steer, -1, 1), hb: touch.brake };
     const k = (a: string, b: string) => (keys.has(a) || keys.has(b) ? 1 : 0);
     return { thr: k("KeyW", "ArrowUp") - k("KeyS", "ArrowDown"), steer: k("KeyD", "ArrowRight") - k("KeyA", "ArrowLeft"), hb: keys.has("Space") };
@@ -1205,6 +1213,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       if (into > 3) body.bobV += 0.3;
     }
     const nr2 = nearest(car.x, car.z, false); car.idx = nr2.i; car.lat = nr2.lat; car.s = nr2.s;
+    if (inp.thr !== 0 && Math.abs(vf) < 0.8 && !car.air) { stuckT += dt; if (stuckT > 2.2) { stuckT = 0; placeCar(car.s); } } else stuckT = 0;
 
     // vertical
     g = groundY(car.x, car.z);
@@ -1548,6 +1557,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
 
   const api: TrackAPI = {
     setInput(i) { touch = { throttle: i.throttle || 0, steer: i.steer || 0, brake: !!i.brake }; },
+    setAuto(on) { autopilot = on; if (on) { introMode = false; } },
     setPaused(p) { paused = p; if (p) keys.clear(); sfx.engine(rpm, 0, 0, p); },
     celebrate() {
       ready.then(() => {

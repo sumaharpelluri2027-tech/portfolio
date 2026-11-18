@@ -86,7 +86,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, low ? 1.25 : 1.75));
   renderer.setSize(W(), H());
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.22;
+  renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
@@ -113,7 +113,14 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   camera.lookAt(target);
 
   /* ---------- lights ---------- */
-  const tubes = [[-3.6, -2.6], [3.8, -2.4], [-2.2, 2.2], [2.6, 3.4]].map(([x, z]) => { const l = new THREE.PointLight(0xf2f6ff, 0, 11, 1.4); l.position.set(x, 4.8, z); scene.add(l); return l; });
+  const tubes = [[-2.6, 1.6], [2.6, 1.6]].map(([x, z]) => { const l = new THREE.PointLight(0xfff1df, 0, 12, 1.5); l.position.set(x, 4.8, z); scene.add(l); return l; });
+  // gallery lighting: a warm spot on each thing worth reading, so the room stays moody but nothing is lost in the dark
+  const SPOTS: [number, number, number][] = [[-1.72, 2.1, -4.2], [1.25, 1.9, -4.2], [2.95, 1.8, -4.2], [-3.6, 1.1, -3.6], [-6.3, 1.9, 0.95], [5.7, 1.3, -2.3], [-5.8, 0.7, -1.3]];
+  const spots = SPOTS.map(([x, y, z]) => {
+    const sp = new THREE.SpotLight(0xffe2b8, 0, 7.5, 0.5, 0.75, 1.6);
+    const wallX = Math.abs(x) > 5.5; sp.position.set(wallX ? x * 0.62 : x, 4.6, wallX ? z : z + 2.4);
+    sp.target.position.set(x, y, z); scene.add(sp, sp.target); return sp;
+  });
   const hemi = new THREE.HemisphereLight(0x8fa6c0, 0x1a140e, 0.0);
   scene.add(hemi);
   const lamp = new THREE.SpotLight(0xffc98a, 0, 14, 0.62, 0.55, 1.4);
@@ -254,7 +261,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     g.fillText("SYSTEMS · DATA · OPERATIONS — EST. VIT VELLORE", 26, 300);
   });
   const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 0.98), new THREE.MeshStandardMaterial({ map: sign, transparent: true, roughness: 0.95, depthWrite: false }));
-  signMesh.position.set(-1.2, 3.35, -4.27); room.add(signMesh);
+  signMesh.position.set(-2.05, 3.35, -4.27); room.add(signMesh);
 
   /* ---------- the lift and the buggy ---------- */
   const buggy = opt.createBuggy();
@@ -731,9 +738,10 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   function startIntro() { introStart = clock.getElapsedTime(); }
   function lightLevel(k: number) {
     lamp.intensity = 46 * k; if (bulbMat) bulbMat.emissiveIntensity = 7 * k;
-    hemi.intensity = 0.95 * k; fill.intensity = 12 * k; shelfFill.intensity = 7 * k; rim.intensity = 0.9 * k;
-    tubes.forEach((l) => { l.intensity = 22 * k; });
-    (scene as unknown as { environmentIntensity: number }).environmentIntensity = 0.55 * k;
+    hemi.intensity = 0.5 * k; fill.intensity = 8 * k; shelfFill.intensity = 6 * k; rim.intensity = 0.7 * k;
+    tubes.forEach((l) => { l.intensity = 9 * k; });
+    spots.forEach((l) => { l.intensity = 16 * k; });
+    (scene as unknown as { environmentIntensity: number }).environmentIntensity = 0.32 * k;
   }
   lightLevel(0);
 

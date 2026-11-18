@@ -1374,6 +1374,159 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   /* --------------------------------------------------------- build */
   let raf = 0, running = true, disposed = false, readyFired = false, teleAcc = 0;
   const clock = new THREE.Clock();
+
+  /* ------------------------------------------------ stage worlds */
+  // each stage dresses the track for its chapter: fintech money-town, an ops yard, a data centre, a neon AI city
+  const decor: THREE.Group[] = [0, 1, 2, 3].map(() => { const g = new THREE.Group(); g.visible = false; scene.add(g); return g; }); // outside `world`, so the static merge leaves them alone
+  const decorAnim: ((t: number) => void)[][] = [[], [], [], []];
+  let decorOn = 0;
+  function trackSpot(s: number, side: number, gap: number) {
+    const i = idxOf(((s % L) + L) % L); const edge = side < 0 ? T.offL[i] : T.offR[i];
+    const d = side * (Math.max(edge, WALL_D) + gap);
+    const p = at(i, d); const back = (i - 24 + NS) % NS;
+    return { p, i, look: new THREE.Vector3(px[back], 0, pz[back]) };
+  }
+  function okSpot(p: THREE.Vector3, m = WALL_D + 2.5) { return !nearTrack(p.x, p.z, m) && !inGarage(p.x, p.z) && Math.abs(p.x - 7) + Math.abs(p.z) > 14; }
+  function billboard(g: THREE.Group, s: number, side: number, title: string, sub: string, bg: string, fg: string, accent: string, glow = 0.35) {
+    for (let tries = 0; tries < 6; tries++) {
+      const sp = trackSpot(s + tries * 3, side, 4 + tries); if (!okSpot(sp.p)) continue;
+      const tex = canvasTex(1024, 512, (k) => {
+        k.fillStyle = bg; k.fillRect(0, 0, 1024, 512);
+        k.fillStyle = accent; k.fillRect(0, 0, 1024, 26); k.fillRect(0, 486, 1024, 26);
+        let fs = 150; k.font = `${fs}px ${STENCIL}`; while (k.measureText(title).width > 940 && fs > 60) { fs -= 6; k.font = `${fs}px ${STENCIL}`; }
+        k.fillStyle = fg; k.textAlign = "center"; k.textBaseline = "middle"; k.fillText(title, 512, 230);
+        k.font = `600 44px ${MONO}`; k.fillStyle = accent; setSpacing(k, 6); k.fillText(sub.toUpperCase(), 512, 380); setSpacing(k, 0);
+      });
+      const b = new THREE.Group(); b.position.copy(sp.p);
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 3.6), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: glow, roughness: 0.7, side: THREE.DoubleSide }));
+      face.position.y = 4.6; b.add(face);
+      for (const x of [-2.6, 2.6]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 4.6, 0.25), darkMat); post.position.set(x, 2.3, -0.05); b.add(post); }
+      b.lookAt(sp.look.x, 0, sp.look.z); g.add(b); return;
+    }
+  }
+  function scatter(g: THREE.Group, n: number, make: () => THREE.Object3D, gapMin = 5, gapMax = 16, s0 = 0) {
+    let k = 0, guard = 0;
+    while (k < n && guard++ < n * 20) {
+      const sp = trackSpot(s0 + rand() * L, rand() < 0.5 ? -1 : 1, gapMin + rand() * (gapMax - gapMin));
+      if (!okSpot(sp.p)) continue;
+      const o = make(); o.position.copy(sp.p); o.rotation.y = rand() * Math.PI * 2; g.add(o); k++;
+    }
+  }
+  function dRing(g: THREE.Group, n: number, r0: number, r1: number, make: (k: number) => THREE.Object3D) {
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + rand() * 0.2, r = r0 + rand() * (r1 - r0);
+      const o = make(k); o.position.set(3 + Math.cos(a) * r, 0, 13 + Math.sin(a) * r); o.lookAt(3, 0, 13); g.add(o);
+    }
+  }
+  function windowsTex(base: string, lit: string, cols = 6, rows = 14, chance = 0.6) {
+    return canvasTex(256, 512, (k) => {
+      k.fillStyle = base; k.fillRect(0, 0, 256, 512);
+      const cw = 256 / cols, rh = 512 / rows;
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) { k.fillStyle = rand() < chance ? lit : "rgba(0,0,0,.35)"; k.fillRect(x * cw + cw * 0.18, y * rh + rh * 0.2, cw * 0.64, rh * 0.55); }
+    });
+  }
+  function dTower(g: THREE.Group, x: number, z: number, w: number, h: number, tex: THREE.Texture, emiss: number) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: emiss, roughness: 0.5, metalness: 0.2 }));
+    m.position.set(x, h / 2, z); g.add(m); return m;
+  }
+  function buildDecor() {
+    /* 1 · THE OWNER: fintech money-town at dawn */
+    {
+      const g = decor[0];
+      const gold = new THREE.MeshStandardMaterial({ color: 0xf2b705, metalness: 0.9, roughness: 0.25, emissive: 0x3a2400 });
+      const coin = new THREE.CylinderGeometry(0.9, 0.9, 0.22, 24);
+      scatter(g, low ? 8 : 14, () => { const st = new THREE.Group(); const n = 3 + Math.floor(rand() * 9); for (let k = 0; k < n; k++) { const c = new THREE.Mesh(coin, gold); c.position.set((rand() - 0.5) * 0.12, 0.11 + k * 0.23, (rand() - 0.5) * 0.12); st.add(c); } return st; });
+      const green = new THREE.MeshStandardMaterial({ color: 0x1fbf6a, emissive: 0x0a5a30, emissiveIntensity: 0.6, roughness: 0.5 });
+      scatter(g, low ? 3 : 5, () => { const ch = new THREE.Group(); [1.5, 2.6, 3.4, 5.2].forEach((h, k) => { const b = new THREE.Mesh(new THREE.BoxGeometry(1, h, 1), green); b.position.set(k * 1.3 - 2, h / 2, 0); ch.add(b); });
+        const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.4, 4), green); arrow.position.set(2.2, 6.4, 0); arrow.rotation.z = -0.6; ch.add(arrow); return ch; }, 7, 14);
+      const tw = windowsTex("#1d3a5c", "#ffe9b0", 5, 16, 0.5);
+      dRing(g, low ? 10 : 18, 58, 80, () => { const t = new THREE.Group(); const h = 14 + rand() * 26, w = 5 + rand() * 4; dTower(t, 0, 0, w, h, tw, 0.35); return t; });
+      billboard(g, L * 0.08, 1, "₹2.5 CR AUM", "Year one · Rabbit Invest", "#0f2238", "#ffffff", "#f2b705");
+      billboard(g, L * 0.33, -1, "HIRE NO. 2", "A week after day one", "#f4efe2", "#13202e", "#1f8fd6");
+      billboard(g, L * 0.58, 1, "B2C → B2B2C", "The call I proposed and modelled", "#0f2238", "#7fd3ff", "#1fbf6a");
+      billboard(g, L * 0.82, -1, "MVP IN 3 DAYS", "Exchange · KYC · APIs · engine", "#13202e", "#ffe08a", "#4fc3f7");
+      decorAnim[0].push((t) => { g.children.forEach((c, k) => { if (c.children.length > 2 && c.children[0] instanceof THREE.Mesh && (c.children[0] as THREE.Mesh).geometry === coin) c.rotation.y = t * 0.4 + k; }); });
+    }
+    /* 2 · THE OPERATOR: an ops yard at midday */
+    {
+      const g = decor[1];
+      const steel = new THREE.MeshStandardMaterial({ color: 0xffb300, metalness: 0.6, roughness: 0.4 });
+      const gears: THREE.Object3D[] = [];
+      const gear = (r: number) => { const o = new THREE.Group(); const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.6, 28), steel); disc.rotation.x = Math.PI / 2; o.add(disc);
+        const teeth = Math.round(r * 6); for (let k = 0; k < teeth; k++) { const a = (k / teeth) * Math.PI * 2; const tb = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.6), steel); tb.position.set(Math.cos(a) * (r + 0.25), Math.sin(a) * (r + 0.25), 0); tb.rotation.z = a; o.add(tb); }
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.3, r * 0.3, 0.8, 16), darkMat); hub.rotation.x = Math.PI / 2; o.add(hub); return o; };
+      scatter(g, low ? 4 : 7, () => { const st = new THREE.Group(); const r = 1.6 + rand() * 1.6; const gr = gear(r); gr.position.y = r + 0.6; st.add(gr); gears.push(gr); const leg = new THREE.Mesh(new THREE.BoxGeometry(0.4, r + 0.6, 0.4), darkMat); leg.position.y = (r + 0.6) / 2; st.add(leg); return st; }, 6, 14);
+      const cols = [0xd84315, 0x1565c0, 0x2e7d32, 0xf9a825, 0x6a1b9a];
+      const ribs = canvasTex(256, 128, (k) => { k.fillStyle = "#fff"; k.fillRect(0, 0, 256, 128); k.fillStyle = "rgba(0,0,0,.28)"; for (let x = 0; x < 256; x += 16) k.fillRect(x, 0, 6, 128); });
+      scatter(g, low ? 8 : 14, () => { const st = new THREE.Group(); const n = 1 + Math.floor(rand() * 3); for (let k = 0; k < n; k++) { const c = new THREE.Mesh(new THREE.BoxGeometry(6, 2.5, 2.4), new THREE.MeshStandardMaterial({ map: ribs, color: cols[Math.floor(rand() * cols.length)], roughness: 0.7 })); c.position.y = 1.25 + k * 2.5; c.rotation.y = (rand() - 0.5) * 0.3; st.add(c); } return st; }, 6, 18);
+      // conveyor with boxes riding it
+      const boxes: THREE.Mesh[] = [];
+      scatter(g, low ? 2 : 4, () => { const st = new THREE.Group(); const belt = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, 1.4), darkMat); belt.position.y = 1; st.add(belt);
+        for (const x of [-4.5, 0, 4.5]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1, 1.2), steel); l.position.set(x, 0.5, 0); st.add(l); }
+        for (let k = 0; k < 5; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.8), new THREE.MeshStandardMaterial({ color: 0xc8a06a, roughness: 0.9 })); b.position.set(-5 + k * 2, 1.5, 0); b.userData.x0 = -5 + k * 2; st.add(b); boxes.push(b); } return st; }, 6, 12);
+      const fw = windowsTex("#8a9099", "#d9e2ea", 8, 6, 0.8);
+      dRing(g, low ? 8 : 14, 58, 82, () => { const f = new THREE.Group(); const w = 12 + rand() * 10, h = 7 + rand() * 6; const b = dTower(f, 0, 0, w, h, fw, 0.1); b.scale.z = 0.6;
+        for (let k = 0; k < 2; k++) { const ch = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, h + 8, 12), new THREE.MeshStandardMaterial({ color: 0xb04030, roughness: 0.8 })); ch.position.set(-w / 4 + k * 3, (h + 8) / 2, 0); f.add(ch); } return f; });
+      billboard(g, L * 0.08, 1, "80% AUTOMATED", "Recurring manual ops, gone", "#ffb300", "#1b1714", "#1b1714", 0.2);
+      billboard(g, L * 0.33, -1, "SOPs FIRST", "Then Python and Apps Script", "#1b1714", "#ffb300", "#ffb300");
+      billboard(g, L * 0.58, 1, "OPS: 0 → 1", "Built from nothing, founding team", "#ffb300", "#1b1714", "#1b1714", 0.2);
+      billboard(g, L * 0.82, -1, "LEAD IN 18 MONTHS", "Senior Associate → Lead", "#1b1714", "#ffffff", "#ffb300");
+      decorAnim[1].push((t) => { gears.forEach((o, k) => { o.rotation.z = t * (k % 2 ? -0.8 : 0.8); }); boxes.forEach((b) => { b.position.x = -5 + (((b.userData.x0 + 5) + t * 1.4) % 10); }); });
+    }
+    /* 3 · THE DATA BRAIN: a data centre at sunset */
+    {
+      const g = decor[2];
+      const ledTex = canvasTex(128, 512, (k) => { k.fillStyle = "#0b0f16"; k.fillRect(0, 0, 128, 512); for (let y = 8; y < 512; y += 16) { k.fillStyle = "#1c2430"; k.fillRect(6, y - 6, 116, 12); for (let x = 14; x < 118; x += 14) { const r = rand(); k.fillStyle = r < 0.5 ? "#2bff88" : r < 0.75 ? "#36c8ff" : r < 0.85 ? "#ff4a4a" : "#10161e"; k.fillRect(x, y - 2, 6, 4); } } });
+      const leds: THREE.MeshStandardMaterial[] = [];
+      scatter(g, low ? 10 : 18, () => { const st = new THREE.Group(); const n = 2 + Math.floor(rand() * 3); for (let k = 0; k < n; k++) { const mat = new THREE.MeshStandardMaterial({ map: ledTex, emissive: 0xffffff, emissiveMap: ledTex, emissiveIntensity: 1, roughness: 0.4, metalness: 0.5 }); leds.push(mat); const r = new THREE.Mesh(new THREE.BoxGeometry(1.1, 4.2, 1.2), mat); r.position.set(k * 1.25, 2.1, 0); st.add(r); } return st; }, 5, 12);
+      const holo = (c: number) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+      const holos: THREE.Object3D[] = [];
+      scatter(g, low ? 4 : 7, () => { const st = new THREE.Group(); const hs = [1.5, 2.2, 2.8, 4.6]; hs.forEach((h, k) => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.8, h, 0.8), holo(k === 3 ? 0x2bff88 : 0x36c8ff)); b.position.set(k * 1.05 - 1.6, 1.4 + h / 2, 0); st.add(b); });
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.8, 0.4, 24), darkMat); base.position.y = 0.2; st.add(base); holos.push(st); return st; }, 7, 14);
+      // data pillars: beams of light streaming up
+      const beamTex = canvasTex(64, 512, (k) => { for (let y = 0; y < 512; y += 4) { k.fillStyle = `rgba(80,220,255,${rand() < 0.3 ? 0.9 : 0.08})`; k.fillRect(24, y, 16, 3); } }, true, true);
+      dRing(g, low ? 10 : 18, 45, 70, () => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 60, 8, 1, true), new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); m.position.y = 30; const o = new THREE.Group(); o.add(m); return o; });
+      const dw = windowsTex("#141a24", "#3ad0ff", 4, 20, 0.35);
+      dRing(g, low ? 8 : 14, 72, 92, () => { const t = new THREE.Group(); dTower(t, 0, 0, 10 + rand() * 6, 8 + rand() * 6, dw, 0.8); return t; });
+      billboard(g, L * 0.08, 1, "50% → 95%", "Data accuracy · CAMS · KFin · AMFI", "#0b0f16", "#2bff88", "#36c8ff", 0.6);
+      billboard(g, L * 0.33, -1, "5× CONVERSION", "10% → 50%, from one dashboard", "#0b0f16", "#36c8ff", "#2bff88", 0.6);
+      billboard(g, L * 0.58, 1, "STOP BAD ROWS", "At the source, before anyone builds on them", "#0b0f16", "#ff6a5a", "#36c8ff", 0.6);
+      billboard(g, L * 0.82, -1, "FUNNEL → CEO", "Myntra · Wipro · 100+ accounts", "#0b0f16", "#ffffff", "#2bff88", 0.6);
+      beamTex.repeat.set(1, 3);
+      decorAnim[2].push((t) => { beamTex.offset.y = -t * 0.35; leds.forEach((m, k) => { m.emissiveIntensity = 0.75 + 0.35 * Math.sin(t * 6 + k * 1.7); }); holos.forEach((o, k) => { o.rotation.y = t * 0.5 + k; }); });
+    }
+    /* 4 · THE BUILDER: a neon AI city at night */
+    {
+      const g = decor[3];
+      const neon = (c: number) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
+      const nw = [windowsTex("#140a2a", "#c56bff", 6, 18, 0.45), windowsTex("#0a1630", "#3ad0ff", 6, 18, 0.45), windowsTex("#200a24", "#ff5fb0", 6, 18, 0.4)];
+      dRing(g, low ? 14 : 26, 55, 85, (k) => { const t = new THREE.Group(); const h = 16 + rand() * 40, w = 5 + rand() * 5; dTower(t, 0, 0, w, h, nw[k % 3], 1.2);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.4, w + 0.2), neon([0xc56bff, 0x3ad0ff, 0xff5fb0][k % 3])); cap.position.y = h; t.add(cap); return t; });
+      // the AI core: a glowing chip with a spinning wireframe brain above it
+      const brains: THREE.Object3D[] = [];
+      scatter(g, low ? 2 : 3, () => { const st = new THREE.Group(); const chip = new THREE.Mesh(new THREE.BoxGeometry(4, 0.6, 4), new THREE.MeshStandardMaterial({ color: 0x1a1030, metalness: 0.7, roughness: 0.3 })); chip.position.y = 0.3; st.add(chip);
+        for (let k = 0; k < 8; k++) for (const sd of [-1, 1]) { const pin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.8), neon(0x3ad0ff)); pin.position.set(-1.75 + k * 0.5, 0.3, sd * 2.3); st.add(pin); const pin2 = pin.clone(); pin2.rotation.y = Math.PI / 2; pin2.position.set(sd * 2.3, 0.3, -1.75 + k * 0.5); st.add(pin2); }
+        const b = new THREE.Mesh(new THREE.IcosahedronGeometry(1.7, 1), new THREE.MeshBasicMaterial({ color: 0xc56bff, wireframe: true, toneMapped: false })); b.position.y = 3.6; st.add(b); brains.push(b); return st; }, 8, 14);
+      // the Decco stall
+      scatter(g, 1, () => { const st = new THREE.Group(); const counter = new THREE.Mesh(new THREE.BoxGeometry(4, 1.1, 1.6), new THREE.MeshStandardMaterial({ color: 0x6b4426, roughness: 0.8 })); counter.position.y = 0.55; st.add(counter);
+        const stripes = canvasTex(256, 64, (k) => { for (let x = 0; x < 256; x += 32) { k.fillStyle = (x / 32) % 2 ? "#f4efe2" : "#e0457b"; k.fillRect(x, 0, 32, 64); } });
+        const awn = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.4), new THREE.MeshStandardMaterial({ map: stripes, side: THREE.DoubleSide })); awn.position.set(0, 2.8, 0.5); awn.rotation.x = -0.5; st.add(awn);
+        for (const x of [-2, 2]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.6, 0.12), darkMat); p.position.set(x, 1.3, -0.6); st.add(p); } return st; }, 6, 9);
+      // searchlights sweeping the night sky
+      const lasers: THREE.Mesh[] = [];
+      dRing(g, low ? 4 : 8, 40, 60, (k) => { const o = new THREE.Group(); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 1.6, 120, 8, 1, true), new THREE.MeshBasicMaterial({ color: [0xc56bff, 0x3ad0ff, 0xff5fb0][k % 3], transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+        m.geometry.translate(0, 60, 0); o.add(m); lasers.push(m); return o; });
+      billboard(g, L * 0.08, 1, "BOARDIQ · LIVE", "Explainable investment decisions", "#140a2a", "#c56bff", "#3ad0ff", 0.9);
+      billboard(g, L * 0.33, -1, "NUTRISATHI · LIVE", "Food labels vs your health", "#0a1630", "#3ad0ff", "#2bff88", 0.9);
+      billboard(g, L * 0.58, 1, "₹3L IN 30 DAYS", "Decco Store · sold by hand", "#200a24", "#ff5fb0", "#f2b705", 0.9);
+      billboard(g, L * 0.82, -1, "VP · AI & ANALYTICS", "Masters' Union · The Ken Round 2", "#140a2a", "#ffffff", "#c56bff", 0.9);
+      decorAnim[3].push((t) => { brains.forEach((b, k) => { b.rotation.y = t * 0.6 + k; b.rotation.x = Math.sin(t * 0.4 + k) * 0.3; }); lasers.forEach((m, k) => { m.rotation.z = Math.sin(t * 0.5 + k * 1.3) * 0.5; m.rotation.x = Math.cos(t * 0.4 + k) * 0.35; }); });
+    }
+    decor.forEach((g) => g.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; } }));
+    showDecor(decorOn);
+  }
+  function showDecor(k: number) { decorOn = k; decor.forEach((g, i) => { g.visible = i === k; }); }
+
   const ready = (async () => {
     await Promise.resolve(); // let the rest of createTrack finish declaring state first
     if (document.fonts?.load) {
@@ -1385,6 +1538,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     gantry();
     const ss = gateS(opts.gates.length);
     opts.gates.forEach((spec, k) => buildGate(spec, k + 1, ss[k]));
+    buildDecor();
     for (let x = -4; x <= 18; x += 5.5) flag(x, -(T.offL[0] + 1.6), [0, 1, 2, 3][Math.round(x) & 3]);
     for (let x = -4; x + 5.5 <= 18.01; x += 5.5) bunting(new THREE.Vector3(x, 4.58, -(T.offL[0] + 1.6)), new THREE.Vector3(x + 5.5, 4.58, -(T.offL[0] + 1.6)), 0.55);
     for (const s of [118, 132]) { const i = idxOf(s); const p = at(i, T.k[i] > 0 ? -(T.offL[i] + 1.8) : T.offR[i] + 1.8); flag(p.x, p.z, s === 118 ? 0 : 1); }
@@ -1524,6 +1678,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     updateCelebrate(dt, t);
     skyMat.uniforms.uTime.value = t;
     if (themeK < 1) { themeK = Math.min(1, themeK + dt / 2.5); applyTheme(themeK * themeK * (3 - 2 * themeK)); }
+    for (const f of decorAnim[decorOn]) f(t);
     sfx.engine(rpm, paused ? 0 : lastThr, clamp(Math.hypot(car.vx, car.vz) / VMAX, 0, 1), paused);
     if (!low) bloom.strength = 0.5 + flashK * 0.35 + gateFlash * 0.25;
     teleAcc += dt; teleT += dt;
@@ -1594,6 +1749,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
           drawBanner(k, sp, g.n, hex); g.tex.needsUpdate = true; g.flash = 1;
         }
         if (theme !== themeTo) { themeFrom = themeTo; themeTo = Math.max(0, Math.min(THEMES.length - 1, theme)); themeK = 0; }
+        showDecor(Math.max(0, Math.min(3, theme)));
       });
     },
     setAuto(on) { autopilot = on; if (on) { introMode = false; } },

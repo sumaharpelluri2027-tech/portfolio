@@ -2,19 +2,21 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, ArrowUpRight, ChevronDown, MessageCircle, X } from "lucide-react";
 import { A } from "../data";
-import { HEROES, PROJECTS, type Hero, type Kind } from "../projects";
+import { FNS, HEROES, PROJECTS, type Hero, type Kind, type Project } from "../projects";
 
 const COVERED = new Set(["boardiq", "nutrisathi", "decco", "arogya", "wing", "case-union", "wing-site"]);
 const LOG = PROJECTS.filter((p) => !COVERED.has(p.id));
 const FILTERS: { id: "all" | Kind | "build"; label: string }[] = [
-  { id: "all", label: "All" }, { id: "case", label: "Case competitions" }, { id: "course", label: "MU coursework" }, { id: "build", label: "Side builds" }, { id: "lead", label: "Leadership" },
+  { id: "all", label: "Every type" }, { id: "build", label: "Live & builds" }, { id: "case", label: "Case competitions" }, { id: "course", label: "MU coursework" }, { id: "lead", label: "Leadership" },
 ];
+const TYPE: Record<Kind, string> = { live: "LIVE", proto: "PROTOTYPE", case: "CASE", course: "COURSEWORK", lead: "LEADERSHIP" };
 const inFilter = (k: Kind, f: string) => f === "all" || k === f || (f === "build" && (k === "live" || k === "proto"));
 
 /** The projects board: five hero projects on a stage, everything else in a compact logbook. */
 export default function Projects({ onClose, onAsk, start = 0 }: { onClose: () => void; onAsk: (q: string) => void; start?: number }) {
   const [i, setI] = useState(start);
   const [f, setF] = useState<string>("all");
+  const [fn, setFn] = useState<string>("all");
   const [openRow, setOpenRow] = useState<string | null>(null);
   const h = HEROES[i];
   useEffect(() => {
@@ -92,44 +94,38 @@ export default function Projects({ onClose, onAsk, start = 0 }: { onClose: () =>
 
         {/* ---------- the logbook ---------- */}
         <div className="mt-12 flex flex-wrap items-end justify-between gap-3">
-          <div><div className="font-mono text-[11px] tracking-[0.25em] text-hazard">THE LOGBOOK · {LOG.length} MORE</div><p className="mt-1 text-sm text-paper/60">Cases, coursework and side builds. Click any line for my part.</p></div>
-          <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Logbook filter">
+          <div><div className="font-mono text-[11px] tracking-[0.25em] text-hazard">THE LOGBOOK · {LOG.length} MORE</div><p className="mt-1 text-sm text-paper/60">Sorted by business function. Click any line for my part.</p></div>
+          <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Project type">
             {FILTERS.map((x) => (
               <button key={x.id} role="tab" aria-selected={f === x.id} type="button" onClick={() => setF(x.id)}
-                className={`shrink-0 rounded-full border px-3 py-1.5 font-mono text-[11px] ${f === x.id ? "border-hazard bg-hazard text-ink" : "border-white/20 text-paper/70 hover:border-white/50"}`}>
+                className={`shrink-0 rounded-full border px-3 py-1.5 font-mono text-[11px] ${f === x.id ? "border-paper bg-paper text-ink" : "border-white/20 text-paper/70 hover:border-white/50"}`}>
                 {x.label} <span className="opacity-60">{LOG.filter((p) => inFilter(p.kind, x.id)).length}</span>
               </button>
             ))}
           </div>
         </div>
-        <div className="mt-4 grid items-start gap-2 md:grid-cols-2">
-          {rows.map((p) => {
-            const on = openRow === p.id;
-            return (
-              <div key={p.id} className={`rounded-xl border transition-colors ${on ? "border-hazard/50 bg-white/[.04]" : "border-white/10 hover:border-white/25"}`}>
-                <button type="button" onClick={() => setOpenRow(on ? null : p.id)} aria-expanded={on} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${p.kind === "live" ? "bg-lcd" : p.hot ? "bg-hazard" : "bg-white/30"}`} />
-                  <span className="min-w-0 flex-1"><span className="block truncate font-cond text-[17px] font-semibold">{p.title}</span><span className="block truncate font-mono text-[10.5px] text-paper/50">{p.where}</span></span>
-                  <span className="hidden shrink-0 rounded-full bg-white/[.07] px-2 py-0.5 font-mono text-[10px] text-paper/70 sm:inline">{p.status}</span>
-                  <ChevronDown size={16} className={`shrink-0 transition-transform ${on ? "rotate-180" : ""}`} />
-                </button>
-                <AnimatePresence initial={false}>
-                  {on && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                      <div className="space-y-2 px-4 pb-4 pl-9 text-[14px]">
-                        <p className="text-paper/80">{p.what}</p>
-                        <p><span className="font-mono text-[10px] tracking-wider text-hazard">MY PART · </span><span className="text-paper/90">{p.mine}</span></p>
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {p.href && <a href={p.href} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-mono text-[11px] text-hazard">{(p.cta || "Open").toUpperCase()} <ArrowUpRight size={12} /></a>}
-                          <button type="button" onClick={() => onAsk(`Tell me about ${p.title}. What was your part?`)} className="inline-flex items-center gap-1 font-mono text-[11px] text-paper/70 hover:text-hazard"><MessageCircle size={12} /> ASK ME ABOUT THIS</button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+        <div className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Business function">
+          <button role="tab" aria-selected={fn === "all"} type="button" onClick={() => setFn("all")} className={`rounded-full border px-3 py-1.5 text-[12.5px] ${fn === "all" ? "border-hazard bg-hazard font-semibold text-ink" : "border-white/20 text-paper/75 hover:border-white/50"}`}>All functions</button>
+          {FNS.filter((x) => LOG.some((p) => p.fn === x.id)).map((x) => (
+            <button key={x.id} role="tab" aria-selected={fn === x.id} type="button" onClick={() => setFn(x.id)}
+              className="rounded-full border px-3 py-1.5 text-[12.5px]" style={fn === x.id ? { background: x.color, borderColor: x.color, color: "#14110e", fontWeight: 600 } : { borderColor: `${x.color}66`, color: "rgba(239,233,220,.8)" }}>
+              {x.emoji} {x.label} <span className="opacity-60">{rows.filter((p) => p.fn === x.id).length}</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-5 space-y-6">
+          {FNS.filter((x) => (fn === "all" || fn === x.id) && rows.some((p) => p.fn === x.id)).map((x) => (
+            <section key={x.id} aria-label={x.label}>
+              <div className="mb-2 flex items-center gap-2 border-b pb-1.5" style={{ borderColor: `${x.color}55` }}>
+                <span className="text-[18px]">{x.emoji}</span><h3 className="font-cond text-[20px] font-semibold" style={{ color: x.color }}>{x.label}</h3>
+                <span className="font-mono text-[11px] text-paper/45">{rows.filter((p) => p.fn === x.id).length}</span>
               </div>
-            );
-          })}
+              <div className="grid items-start gap-2 md:grid-cols-2">
+                {rows.filter((p) => p.fn === x.id).map((p) => <Row key={p.id} p={p} color={x.color} on={openRow === p.id} toggle={() => setOpenRow(openRow === p.id ? null : p.id)} onAsk={onAsk} />)}
+              </div>
+            </section>
+          ))}
+          {rows.filter((p) => fn === "all" || p.fn === fn).length === 0 && <p className="text-paper/55">Nothing of this type in that function yet.</p>}
         </div>
       </div>
     </motion.div>
@@ -162,6 +158,33 @@ function Visual({ h }: { h: Hero }) {
         </div>
       </div>
       {h.img2 && <motion.img initial={{ opacity: 0, rotate: 0, y: 20 }} animate={{ opacity: 1, rotate: -4, y: 0 }} transition={{ delay: 0.35 }} src={A(h.img2)} alt="" className="absolute bottom-3 right-3 w-[38%] rounded-md border-4 border-[#f2eee6] shadow-xl" />}
+    </div>
+  );
+}
+
+function Row({ p, color, on, toggle, onAsk }: { p: Project; color: string; on: boolean; toggle: () => void; onAsk: (q: string) => void }) {
+  return (
+    <div className="rounded-xl border transition-colors" style={{ borderColor: on ? color : "rgba(255,255,255,.1)", background: on ? "rgba(255,255,255,.04)" : undefined }}>
+      <button type="button" onClick={toggle} aria-expanded={on} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: color }} />
+        <span className="min-w-0 flex-1"><span className="block truncate font-cond text-[17px] font-semibold">{p.title}</span><span className="block truncate font-mono text-[10.5px] text-paper/50">{TYPE[p.kind]} · {p.where}</span></span>
+        <span className="hidden shrink-0 rounded-full bg-white/[.07] px-2 py-0.5 font-mono text-[10px] text-paper/70 sm:inline">{p.status}</span>
+        <ChevronDown size={16} className={`shrink-0 transition-transform ${on ? "rotate-180" : ""}`} />
+      </button>
+      <AnimatePresence initial={false}>
+        {on && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+            <div className="space-y-2 px-4 pb-4 pl-8 text-[14px]">
+              <p className="text-paper/80">{p.what}</p>
+              <p><span className="font-mono text-[10px] tracking-wider" style={{ color }}>MY PART · </span><span className="text-paper/90">{p.mine}</span></p>
+              <div className="flex flex-wrap gap-3 pt-1">
+                {p.href && <a href={p.href} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-mono text-[11px] text-hazard">{(p.cta || "Open").toUpperCase()} <ArrowUpRight size={12} /></a>}
+                <button type="button" onClick={() => onAsk(`Tell me about ${p.title}. What was your part?`)} className="inline-flex items-center gap-1 font-mono text-[11px] text-paper/70 hover:text-hazard"><MessageCircle size={12} /> ASK ME ABOUT THIS</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

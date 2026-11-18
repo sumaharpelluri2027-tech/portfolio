@@ -199,15 +199,15 @@ export const CAR_ORDER: CarPart[] = ["brakes", "engine", "accelerator", "steerin
 
 export interface PropInfo { id: Exclude<StationId, CarPart>; label: string; hint: string }
 export const PROPS: PropInfo[] = [
-  { id: "driver", label: "Driver poster", hint: "About me" },
-  { id: "board", label: "Build board", hint: "Every MU project, case and live product" },
-  { id: "crew", label: "Pit crew wall", hint: "The AI & Analytics Wing" },
+  { id: "driver", label: "Racing licence", hint: "Education" },
+  { id: "board", label: "Build board", hint: "Every project, by business function" },
+  { id: "crew", label: "Co-curriculars board", hint: "The Wing, Decco, BAJA, cases" },
   { id: "decco", label: "Decco Store board", hint: "₹3L in 30 days, sold by hand" },
   { id: "toolchest", label: "Tool chest", hint: "What I actually work with" },
-  { id: "trophies", label: "Trophy shelf", hint: "Milestones" },
-  { id: "laptop", label: "Laptop", hint: "Ask Sumahar AI" },
+  { id: "trophies", label: "Trophy shelf", hint: "Achievements" },
+  { id: "laptop", label: "Laptop", hint: "Contact, CV and ask me" },
   { id: "powerbox", label: "Power box", hint: "Lift the bonnet: see the data wiring" },
-  { id: "journey", label: "Road map", hint: "My career journey, stop by stop" },
+  { id: "journey", label: "Road map", hint: "Work-ex, stop by stop" },
   { id: "exit", label: "Garage door", hint: "Out to the test track: drive the buggy" },
 ];
 

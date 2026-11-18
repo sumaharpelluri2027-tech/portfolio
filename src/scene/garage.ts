@@ -39,6 +39,8 @@ export interface GarageAPI {
   turn(dir: number): void;
   /** stop drawing while a full-screen panel covers the scene */
   setHidden(on: boolean): void;
+  /** full lights or the moody workshop look */
+  setLights(m: "full" | "normal"): void;
   goZone(z: ZoneId): void;
   setXray(on: boolean): void;
   bindLabel(id: string, el: HTMLElement | null): void;
@@ -79,7 +81,9 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 
 /* ------------------------------------------------------------------ main */
 export function createGarage(opt: GarageOptions): GarageAPI {
   const { container } = opt;
-  const low = opt.quality === "low";
+  // weaker machines get a lighter setup from the first frame, so quality never visibly switches mid-visit
+  const weak = (navigator.hardwareConcurrency ?? 8) <= 4 || ((navigator as unknown as { deviceMemory?: number }).deviceMemory ?? 8) <= 4;
+  const low = opt.quality === "low" || weak;
   const W = () => container.clientWidth || window.innerWidth, H = () => container.clientHeight || window.innerHeight;
 
   const renderer = new THREE.WebGLRenderer({ antialias: !low, powerPreference: "high-performance" });
@@ -670,6 +674,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   function worldAnchor(id: StationId) {
     const s = stations.get(id)!;
     if (parts[id as CarPart]) { const v = (parts[id as CarPart].userData.anchor as THREE.Vector3).clone(); return buggy.root.localToWorld(v); }
+    if (id === "journey") return s.anchor.clone().setY(2.45); // tag the map from below, clear of the header
     return s.anchor.clone();
   }
   function partView(id: CarPart) {
@@ -713,7 +718,16 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     while (y - look.base > Math.PI) y -= Math.PI * 2; while (y - look.base < -Math.PI) y += Math.PI * 2;
     look.base = y; flyTo(lookPose(), 1.1);
   }
-  function turn(dir: number) { focused = null; look.base -= dir * Math.PI / 2; flyTo(lookPose(), 0.9); }
+  // arrow keys step between the things worth looking at, never at a blank wall
+  const VIEWS = [CAR, new THREE.Vector3(2.45, 2.6, -4.2), new THREE.Vector3(5.7, 1.4, -2.3), new THREE.Vector3(0.6, 2.0, 7.4), new THREE.Vector3(-6.3, 1.9, 0.95), new THREE.Vector3(-3.3, 1.2, -3.6)];
+  function turn(dir: number) {
+    focused = null; const e = EYE();
+    const ys = VIEWS.map((v) => { let y = yawTo(e, v); while (y - look.base > Math.PI) y -= Math.PI * 2; while (y - look.base < -Math.PI) y += Math.PI * 2; return y; });
+    // dir +1 = turn right = yaw decreasing
+    const cand = ys.filter((y) => (dir > 0 ? y < look.base - 0.15 : y > look.base + 0.15)).sort((a, b) => (dir > 0 ? b - a : a - b));
+    look.base = cand.length ? cand[0] : look.base - dir * Math.PI / 2;
+    flyTo(lookPose(), 0.9);
+  }
 
   /* ---------- labels ---------- */
   const labels = new Map<string, HTMLElement>();
@@ -726,6 +740,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
       if (id.startsWith("wire-")) p = wireTargets.get(id);
       else if (stations.has(id as StationId)) p = worldAnchor(id as StationId);
       if (!p) { node.style.opacity = "0"; return; }
+      if (node.style.opacity === "0") node.style.opacity = "";
       tmp.copy(p).project(camera);
       const vis = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
       node.style.transform = `translate3d(${((tmp.x + 1) / 2) * w}px, ${((1 - tmp.y) / 2) * h}px, 0)`;
@@ -736,38 +751,38 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   /* ---------- intro ---------- */
   let introStart = -1, introDone = false;
   function startIntro() { introStart = clock.getElapsedTime(); }
+  /** "full": everything bright and easy to read; "normal": the moody workshop look */
+  const LIGHTS = {
+    full: { lamp: 52, hemi: 1.05, fill: 12, shelf: 8, rim: 1, tube: 22, spot: 18, env: 0.6, exp: 1.25 },
+    normal: { lamp: 46, hemi: 0.5, fill: 8, shelf: 6, rim: 0.7, tube: 9, spot: 16, env: 0.32, exp: 1.1 },
+  };
+  let mode: keyof typeof LIGHTS = "full", level = 0;
   function lightLevel(k: number) {
-    lamp.intensity = 46 * k; if (bulbMat) bulbMat.emissiveIntensity = 7 * k;
-    hemi.intensity = 0.5 * k; fill.intensity = 8 * k; shelfFill.intensity = 6 * k; rim.intensity = 0.7 * k;
-    tubes.forEach((l) => { l.intensity = 9 * k; });
-    spots.forEach((l) => { l.intensity = 16 * k; });
-    (scene as unknown as { environmentIntensity: number }).environmentIntensity = 0.32 * k;
+    level = k; const L = LIGHTS[mode];
+    lamp.intensity = L.lamp * k; if (bulbMat) bulbMat.emissiveIntensity = 7 * k;
+    hemi.intensity = L.hemi * k; fill.intensity = L.fill * k; shelfFill.intensity = L.shelf * k; rim.intensity = L.rim * k;
+    tubes.forEach((l) => { l.intensity = L.tube * k; });
+    spots.forEach((l) => { l.intensity = L.spot * k; });
+    renderer.toneMappingExposure = L.exp;
+    (scene as unknown as { environmentIntensity: number }).environmentIntensity = L.env * k;
   }
   lightLevel(0);
 
   /* ---------- loop ---------- */
   const clock = new THREE.Clock();
   let raf = 0, running = true, lastScan = 0;
-  const perf = { n: 0, sum: 0 };
   let hidden = false; // a full-screen panel covers the garage: skip drawing
 
   function frame() {
     if (!running) return;
     const rawDt = clock.getDelta();
     const dt = Math.min(rawDt, 0.05), t = clock.elapsedTime;
-    if (introDone && !QA && perf.n < 120) {
-      perf.n++; perf.sum += rawDt;
-      if (perf.n === 120 && perf.sum / 120 > 1 / 42) {
-        renderer.setPixelRatio(1); composer.setPixelRatio?.(1); bloom.enabled = false; outline.edgeGlow = 0;
-        renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.needsUpdate = true; onResize();
-      }
-    }
+
 
     // intro: flicker, then dolly in
     if (introStart >= 0 && !introDone) {
       const it = t - introStart;
-      const flick = it < 0.5 ? 0.15 : it < 0.6 ? 0.8 : it < 0.68 ? 0.35 : Math.min(1, 0.7 + (it - 0.68) * 1.5);
-      lightLevel(flick);
+      const up = Math.min(1, Math.max(0, it / 1.2)); lightLevel(up * up * (3 - 2 * up)); // lights fade up smoothly, no flicker
       const k = ease(Math.min(1, Math.max(0, (it - 0.2) / 2.2)));
       const H0 = HOME(); const start = new THREE.Vector3(0.6, 2.3, 11.5);
       camera.position.lerpVectors(start, H0.pos, k); target.copy(H0.target);
@@ -812,11 +827,11 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     // free look: glance with the mouse, push to an edge to keep turning
     if (introDone && !tween && !focused) {
       if (pointerIn && !dragging) {
-        look.hoverYaw = -pointer.x * 0.42; look.hoverPitch = pointer.y * 0.12;
+        look.hoverYaw = -pointer.x * 0.28; look.hoverPitch = pointer.y * 0.08;
         const ax = Math.abs(pointer.x);
         if (ax > 0.78 && Math.abs(pointer.y) < 0.72 && !hovered) look.base -= Math.sign(pointer.x) * ((ax - 0.78) / 0.22) * 1.25 * dt;
       } else if (!pointerIn) { look.hoverYaw *= 1 - Math.min(1, dt * 1.5); look.hoverPitch *= 1 - Math.min(1, dt * 1.5); }
-      const wantYaw = look.base + look.hoverYaw, k = 1 - Math.pow(0.004, dt);
+      const wantYaw = look.base + look.hoverYaw, k = 1 - Math.pow(0.02, dt);
       look.yaw += (wantYaw - look.yaw) * k;
       const p = Math.max(-0.5, Math.min(0.35, look.pitch + look.hoverPitch));
       const e = EYE(); camera.position.lerp(e, k);
@@ -843,7 +858,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   void loaded; void total;
 
   return {
-    focus, setXray, bindLabel, startIntro, goZone, turn, setHidden: (on: boolean) => { hidden = on; },
+    focus, setXray, bindLabel, startIntro, goZone, turn, setHidden: (on: boolean) => { hidden = on; }, setLights: (m: "full" | "normal") => { mode = m; lightLevel(level); },
     dispose() {
       running = false; cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVis);

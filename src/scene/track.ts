@@ -13,7 +13,7 @@ export interface GateSpec {
   /** optional CSS hex accent (banner, post light strips, timing beam, burst). Falls back to a vivid palette by index. */
   color?: string;
 }
-export interface Telemetry { speedKmh: number; rpm: number; gear: number; lapTime: number; bestLap: number | null; gatesCleared: GateId[]; nextGate: GateId | null; }
+export interface Telemetry { s: number; speedKmh: number; rpm: number; gear: number; lapTime: number; bestLap: number | null; gatesCleared: GateId[]; nextGate: GateId | null; }
 export interface TrackOptions {
   container: HTMLElement;
   createBuggy: () => Buggy;
@@ -22,14 +22,27 @@ export interface TrackOptions {
   onTelemetry: (t: Telemetry) => void;
   onReady: () => void;
   quality?: "high" | "low";
+  /** the car touched a pickup (boost pad, fuel can, drop zone, hurdle, decision lane) */
+  onPickup?: (p: Pickup) => void;
 }
+export type PickupKind = "boost" | "can" | "drop" | "hurdle" | "good";
+/** something on the track at arc length `s`, lateral offset `lat` (− left, + right), `w` half-width */
+export interface Pickup { id: string; kind: PickupKind; s: number; lat: number; w?: number; label?: string; color?: string; /** autopilot heads for this one */ aim?: boolean; /** hitting it slows the car, like a hurdle */ costly?: boolean }
 export interface TrackAPI {
   setInput(i: { throttle: number; steer: number; brake: boolean }): void;
   setPaused(p: boolean): void;
   /** let the car drive itself round the lap */
   setAuto(on: boolean): void;
+  /** replace the pickups on the track */
+  setPickups(list: Pickup[]): void;
+  /** a few seconds of extra top speed */
+  boost(sec: number): void;
+  /** scale the top speed (e.g. running low on fuel) */
+  setSpeedScale(k: number): void;
+  /** track length in metres */
+  readonly length: number;
   /** start a new stage: relabel the gates (matched by id), reset which are cleared, and move the sky to another time of day (0 dawn · 1 day · 2 sunset · 3 night) */
-  setStage(specs: GateSpec[], theme: number): void;
+  setStage(specs: GateSpec[], theme: number, decor?: number): void;
   resetCar(): void;
   teleportToGate(id: GateId): void;
   dispose(): void;
@@ -1159,7 +1172,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   function readInput() {
     const man = touch.throttle !== 0 || touch.steer !== 0 || touch.brake || keys.size > 0;
     if (autopilot && !man) {
-      const i2 = (car.idx + 26) % NS, want = Math.atan2(px[i2] - car.x, pz[i2] - car.z), err = wrapAngle(want - car.yaw);
+      const i2 = (car.idx + 26) % NS; const aim = at(i2, autoLat()); const want = Math.atan2(aim.x - car.x, aim.z - car.z), err = wrapAngle(want - car.yaw);
       return { thr: Math.abs(err) < 0.35 ? 0.85 : 0.35, steer: clamp(-err * 2.6, -1, 1), hb: false };
     }
     if (touch.throttle !== 0 || touch.steer !== 0 || touch.brake) return { thr: clamp(touch.throttle, -1, 1), steer: clamp(touch.steer, -1, 1), hb: touch.brake };
@@ -1184,6 +1197,85 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     sfx.chime(Math.max(0, gates.indexOf(gt)));
   }
 
+
+  /* ---------------------------------------------------------- pickups */
+  let boostT = 0, speedScale = 1;
+  type PU = { p: Pickup; obj: THREE.Group; active: boolean; out: number };
+  const pus: PU[] = [];
+  const puGroup = new THREE.Group(); scene.add(puGroup);
+  const sDiff = (a: number, b: number) => { let d = a - b; while (d > L / 2) d -= L; while (d < -L / 2) d += L; return d; };
+  function puLabel(text: string, color: string) {
+    const t = canvasTex(512, 128, (k) => { k.clearRect(0, 0, 512, 128); k.fillStyle = "rgba(10,8,14,.82)"; k.fillRect(0, 10, 512, 108); k.fillStyle = color; k.fillRect(0, 10, 10, 108);
+      let fs = 64; k.font = `${fs}px ${STENCIL}`; while (k.measureText(text).width > 470 && fs > 28) { fs -= 4; k.font = `${fs}px ${STENCIL}`; }
+      k.fillStyle = "#fff"; k.textAlign = "center"; k.textBaseline = "middle"; k.fillText(text, 266, 66); });
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, fog: false })); sp.scale.set(3.6, 0.9, 1); return sp;
+  }
+  const chevTex = canvasTex(256, 256, (k) => { k.clearRect(0, 0, 256, 256); k.strokeStyle = "#fff"; k.lineWidth = 26; k.lineCap = "round"; for (const y of [60, 130, 200]) { k.beginPath(); k.moveTo(50, y + 40); k.lineTo(128, y - 30); k.lineTo(206, y + 40); k.stroke(); } });
+  function buildPickup(p: Pickup) {
+    const g = new THREE.Group(); const i = idxOf(((p.s % L) + L) % L); const pos = at(i, p.lat); g.position.set(pos.x, groundY(pos.x, pos.z), pos.z); g.rotation.y = yawAt(i);
+    const col = new THREE.Color(p.color ?? (p.kind === "hurdle" ? "#ef5350" : p.kind === "boost" ? "#ff7043" : p.kind === "can" ? "#f2b705" : p.kind === "drop" ? "#ffca28" : "#2bff88"));
+    const w = (p.w ?? 1.6) * 2;
+    if (p.kind === "boost") {
+      const pad = new THREE.Mesh(new THREE.PlaneGeometry(w, 3.2), new THREE.MeshBasicMaterial({ map: chevTex, color: col, transparent: true, toneMapped: false, depthWrite: false }));
+      pad.rotation.x = -Math.PI / 2; pad.position.y = 0.06; g.add(pad);
+      const base = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.3, 3.5), new THREE.MeshBasicMaterial({ color: 0x120a08, transparent: true, opacity: 0.7, depthWrite: false })); base.rotation.x = -Math.PI / 2; base.position.y = 0.05; g.add(base);
+    } else if (p.kind === "can") {
+      const can = new THREE.Group(); const body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.95, 0.4), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.35, metalness: 0.3, roughness: 0.4 })); can.add(body);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 10), darkMat); cap.position.set(0.22, 0.55, 0); can.add(cap); can.position.y = 1.1; can.name = "spin"; g.add(can);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.05, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6, toneMapped: false, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring);
+    } else if (p.kind === "drop") {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(w / 2 - 0.3, w / 2, 40), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, toneMapped: false, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring);
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2, 5, 32, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); beam.position.y = 2.5; g.add(beam);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0xc8a06a, roughness: 0.8 })); box.position.y = 1.6; box.name = "spin"; g.add(box);
+    } else if (p.kind === "hurdle") {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.35, 0.3), new THREE.MeshStandardMaterial({ color: 0xffffff, map: canvasTex(256, 32, (k) => { for (let x = 0; x < 256; x += 32) { k.fillStyle = (x / 32) % 2 ? "#ffffff" : "#e53935"; k.fillRect(x, 0, 32, 32); } }) }));
+      bar.position.y = 0.9; g.add(bar);
+      for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.9, 0.5), darkMat); leg.position.set((sx * w) / 2 - sx * 0.1, 0.45, 0); g.add(leg); }
+    } else {
+      const mat = new THREE.MeshBasicMaterial({ color: col, toneMapped: false });
+      for (const sx of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.8, 0.18), mat); post.position.set((sx * w) / 2, 1.4, 0); g.add(post); }
+      const top = new THREE.Mesh(new THREE.BoxGeometry(w + 0.18, 0.18, 0.18), mat); top.position.y = 2.8; g.add(top);
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(w, 2.8), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide })); glow.position.y = 1.4; g.add(glow);
+    }
+    if (p.label) { const lb = puLabel(p.label, `#${col.getHexString()}`); lb.position.y = p.kind === "boost" ? 1.4 : p.kind === "hurdle" ? 2.0 : 3.5; g.add(lb); }
+    g.traverse((o) => { (o as THREE.Mesh).castShadow = false; });
+    return g;
+  }
+  function setPickups(list: Pickup[]) {
+    for (const u of pus) { puGroup.remove(u.obj); u.obj.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); }
+    pus.length = 0;
+    for (const p of list) { const obj = buildPickup(p); puGroup.add(obj); pus.push({ p, obj, active: true, out: 0 }); }
+  }
+  function checkPickups(vf: number) {
+    for (const u of pus) {
+      if (!u.active) continue;
+      const ds = sDiff(car.s, u.p.s); if (Math.abs(ds) > 1.8) continue;
+      if (Math.abs(car.lat - u.p.lat) > (u.p.w ?? 1.6) + (u.p.kind === "good" ? 0 : 0.6)) continue;
+      u.active = false; u.out = 1;
+      const k = u.p.kind;
+      if (k === "boost") { boostT = 3; fovKick = 12; shake = Math.max(shake, 0.18); sfx.chime(2); }
+      else if (k === "hurdle") { const sc = 0.3; car.vx *= sc; car.vz *= sc; shake = Math.max(shake, 0.4); body.bobV += 0.5; }
+      else if (u.p.costly) { const sc = 0.35; car.vx *= sc; car.vz *= sc; shake = Math.max(shake, 0.35); body.bobV += 0.4; }
+      else { fovKick = 6; sfx.chime(k === "good" ? 3 : 1); }
+      opts.onPickup?.(u.p);
+      void vf;
+    }
+  }
+  function updatePickups(t: number, dt: number) {
+    for (const u of pus) {
+      const sp = u.obj.getObjectByName("spin"); if (sp) { sp.rotation.y = t * 2; sp.position.y = (u.p.kind === "can" ? 1.1 : 1.6) + Math.sin(t * 3) * 0.12; }
+      if (u.out > 0) { u.out = Math.max(0, u.out - dt * 3); const k = u.out; u.obj.scale.setScalar(u.p.kind === "boost" || u.p.kind === "good" || u.p.kind === "hurdle" ? 1 : k * k); if (u.p.kind === "can" || u.p.kind === "drop") u.obj.visible = k > 0.02; }
+    }
+  }
+  function autoLat() {
+    let best: PU | null = null, bd = Infinity;
+    for (const u of pus) { if (!u.active || (u.p.kind !== "hurdle" && u.p.aim === false)) continue; const d = sDiff(u.p.s, car.s); if (d > 1 && d < 45 && d < bd) { bd = d; best = u; } }
+    if (!best) return 0;
+    if (best.p.kind === "hurdle") return best.p.lat > 0 ? -2.3 : 2.3;
+    if (best.p.aim === false) return 0;
+    return best.p.lat;
+  }
+
   /* ---------------------------------------------------------- physics */
   function step(dt: number) {
     const inp = readInput();
@@ -1195,7 +1287,9 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     car.steer += (inp.steer - car.steer) * damp(9, dt);
     if (!car.air) {
       const t = inp.thr;
-      if (t > 0) vf += vf < -0.4 ? 15 * t * dt : 8.5 * t * Math.max(0, 1 - Math.pow(Math.max(vf, 0) / VMAX, 2)) * dt;
+      const vmax = VMAX * speedScale * (boostT > 0 ? 1.55 : 1);
+      if (t > 0) vf += vf < -0.4 ? 15 * t * dt : (boostT > 0 ? 16 : 8.5) * t * Math.max(0, 1 - Math.pow(Math.max(vf, 0) / vmax, 2)) * dt;
+      if (vf > vmax) vf -= (vf - vmax) * Math.min(1, dt * 1.5);
       else if (t < 0) vf += vf > 0.4 ? 15 * t * dt : 5 * t * Math.max(0, 1 - Math.pow(Math.max(-vf, 0) / VREV, 2)) * dt;
       vf -= vf * (t === 0 ? 0.45 : 0.18) * dt;
       if (t === 0) vf -= Math.sign(vf) * Math.min(Math.abs(vf), 1.4 * dt);
@@ -1239,6 +1333,8 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       if (into > 3) body.bobV += 0.3;
     }
     const nr2 = nearest(car.x, car.z, false); car.idx = nr2.i; car.lat = nr2.lat; car.s = nr2.s;
+    boostT = Math.max(0, boostT - dt);
+    checkPickups(vf);
     if (inp.thr !== 0 && Math.abs(vf) < 0.8 && !car.air) { stuckT += dt; if (stuckT > 2.2) { stuckT = 0; placeCar(car.s); } } else stuckT = 0;
 
     // vertical
@@ -1442,9 +1538,9 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       const tw = windowsTex("#1d3a5c", "#ffe9b0", 5, 16, 0.5);
       dRing(g, low ? 10 : 18, 58, 80, () => { const t = new THREE.Group(); const h = 14 + rand() * 26, w = 5 + rand() * 4; dTower(t, 0, 0, w, h, tw, 0.35); return t; });
       billboard(g, L * 0.08, 1, "₹2.5 CR AUM", "Year one · Rabbit Invest", "#0f2238", "#ffffff", "#f2b705");
-      billboard(g, L * 0.33, -1, "HIRE NO. 2", "A week after day one", "#f4efe2", "#13202e", "#1f8fd6");
-      billboard(g, L * 0.58, 1, "B2C → B2B2C", "The call I proposed and modelled", "#0f2238", "#7fd3ff", "#1fbf6a");
-      billboard(g, L * 0.82, -1, "MVP IN 3 DAYS", "Exchange · KYC · APIs · engine", "#13202e", "#ffe08a", "#4fc3f7");
+      billboard(g, L * 0.33, -1, "FUEL = RUNWAY", "Every rupee tracked", "#f4efe2", "#13202e", "#1fbf6a");
+      billboard(g, L * 0.58, 1, "FUND ENGINE", "Built in 2–3 days", "#0f2238", "#7fd3ff", "#1fbf6a");
+      billboard(g, L * 0.82, -1, "MVP WITH THE FOUNDER", "Exchange · KYC · APIs", "#13202e", "#ffe08a", "#4fc3f7");
       decorAnim[0].push((t) => { g.children.forEach((c, k) => { if (c.children.length > 2 && c.children[0] instanceof THREE.Mesh && (c.children[0] as THREE.Mesh).geometry === coin) c.rotation.y = t * 0.4 + k; }); });
     }
     /* 2 · THE OPERATOR: an ops yard at midday */
@@ -1488,10 +1584,10 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       dRing(g, low ? 10 : 18, 45, 70, () => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 60, 8, 1, true), new THREE.MeshBasicMaterial({ map: beamTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); m.position.y = 30; const o = new THREE.Group(); o.add(m); return o; });
       const dw = windowsTex("#141a24", "#3ad0ff", 4, 20, 0.35);
       dRing(g, low ? 8 : 14, 72, 92, () => { const t = new THREE.Group(); dTower(t, 0, 0, 10 + rand() * 6, 8 + rand() * 6, dw, 0.8); return t; });
-      billboard(g, L * 0.08, 1, "50% → 95%", "Data accuracy · CAMS · KFin · AMFI", "#0b0f16", "#2bff88", "#36c8ff", 0.6);
-      billboard(g, L * 0.33, -1, "5× CONVERSION", "10% → 50%, from one dashboard", "#0b0f16", "#36c8ff", "#2bff88", 0.6);
-      billboard(g, L * 0.58, 1, "STOP BAD ROWS", "At the source, before anyone builds on them", "#0b0f16", "#ff6a5a", "#36c8ff", 0.6);
-      billboard(g, L * 0.82, -1, "FUNNEL → CEO", "Myntra · Wipro · 100+ accounts", "#0b0f16", "#ffffff", "#2bff88", 0.6);
+      billboard(g, L * 0.08, 1, "B2C → B2B2C", "The call I proposed", "#0b0f16", "#2bff88", "#36c8ff", 0.6);
+      billboard(g, L * 0.33, -1, "COST vs REVENUE", "Modelled before deciding", "#0b0f16", "#36c8ff", "#2bff88", 0.6);
+      billboard(g, L * 0.58, 1, "COMPETITOR TEARDOWN", "Know the field first", "#0b0f16", "#ff6a5a", "#36c8ff", 0.6);
+      billboard(g, L * 0.82, -1, "DECIDE ON DATA", "Not on gut feel", "#0b0f16", "#ffffff", "#2bff88", 0.6);
       beamTex.repeat.set(1, 3);
       decorAnim[2].push((t) => { beamTex.offset.y = -t * 0.35; leds.forEach((m, k) => { m.emissiveIntensity = 0.75 + 0.35 * Math.sin(t * 6 + k * 1.7); }); holos.forEach((o, k) => { o.rotation.y = t * 0.5 + k; }); });
     }
@@ -1516,10 +1612,10 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       const lasers: THREE.Mesh[] = [];
       dRing(g, low ? 4 : 8, 40, 60, (k) => { const o = new THREE.Group(); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 1.6, 120, 8, 1, true), new THREE.MeshBasicMaterial({ color: [0xc56bff, 0x3ad0ff, 0xff5fb0][k % 3], transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
         m.geometry.translate(0, 60, 0); o.add(m); lasers.push(m); return o; });
-      billboard(g, L * 0.08, 1, "BOARDIQ · LIVE", "Explainable investment decisions", "#140a2a", "#c56bff", "#3ad0ff", 0.9);
-      billboard(g, L * 0.33, -1, "NUTRISATHI · LIVE", "Food labels vs your health", "#0a1630", "#3ad0ff", "#2bff88", 0.9);
+      billboard(g, L * 0.08, 1, "10% → 50%", "Conversion target", "#140a2a", "#ff7043", "#3ad0ff", 0.9);
+      billboard(g, L * 0.33, -1, "FIND THE LEAK", "Where leads drop off", "#0a1630", "#3ad0ff", "#2bff88", 0.9);
       billboard(g, L * 0.58, 1, "₹3L IN 30 DAYS", "Decco Store · sold by hand", "#200a24", "#ff5fb0", "#f2b705", 0.9);
-      billboard(g, L * 0.82, -1, "VP · AI & ANALYTICS", "Masters' Union · The Ken Round 2", "#140a2a", "#ffffff", "#c56bff", 0.9);
+      billboard(g, L * 0.82, -1, "LEADS ON AUTOPILOT", "Marketing lead flow, automated", "#140a2a", "#ffffff", "#c56bff", 0.9);
       decorAnim[3].push((t) => { brains.forEach((b, k) => { b.rotation.y = t * 0.6 + k; b.rotation.x = Math.sin(t * 0.4 + k) * 0.3; }); lasers.forEach((m, k) => { m.rotation.z = Math.sin(t * 0.5 + k * 1.3) * 0.5; m.rotation.x = Math.cos(t * 0.4 + k) * 0.35; }); });
     }
     decor.forEach((g) => g.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; } }));
@@ -1649,6 +1745,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
   function sendTelemetry() {
     const nx = nextGate();
     opts.onTelemetry({
+      s: Math.round(car.s * 10) / 10,
       speedKmh: Math.round(Math.hypot(car.vx, car.vz) * 3.6 * 10) / 10, rpm: Math.round(rpm), gear,
       lapTime: Math.round(lapTime * 1000) / 1000, bestLap: bestLap === null ? null : Math.round(bestLap * 1000) / 1000,
       gatesCleared: gates.filter((g) => cleared.includes(g.spec.id)).map((g) => g.spec.id), nextGate: nx ? nx.spec.id : null,
@@ -1679,6 +1776,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     skyMat.uniforms.uTime.value = t;
     if (themeK < 1) { themeK = Math.min(1, themeK + dt / 2.5); applyTheme(themeK * themeK * (3 - 2 * themeK)); }
     for (const f of decorAnim[decorOn]) f(t);
+    updatePickups(t, dt);
     sfx.engine(rpm, paused ? 0 : lastThr, clamp(Math.hypot(car.vx, car.vz) / VMAX, 0, 1), paused);
     if (!low) bloom.strength = 0.5 + flashK * 0.35 + gateFlash * 0.25;
     teleAcc += dt; teleT += dt;
@@ -1714,6 +1812,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       return Math.round(n);
     };
     (window as unknown as Record<string, unknown>).__trackDebug = {
+      pick: () => ({ s: car.s, lat: car.lat, L, pus: pus.map((u) => [u.p.id, u.active, Math.round(u.p.s), u.p.lat]) }),
       advance(sec: number, auto = false) {
         const n = Math.round(sec * 60);
         for (let k = 0; k < n; k++) {
@@ -1739,7 +1838,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
 
   const api: TrackAPI = {
     setInput(i) { touch = { throttle: i.throttle || 0, steer: i.steer || 0, brake: !!i.brake }; },
-    setStage(specs, theme) {
+    setStage(specs, theme, dec) {
       ready.then(() => {
         cleared.length = 0;
         for (const sp of specs) {
@@ -1749,9 +1848,13 @@ export function createTrack(opts: TrackOptions): TrackAPI {
           drawBanner(k, sp, g.n, hex); g.tex.needsUpdate = true; g.flash = 1;
         }
         if (theme !== themeTo) { themeFrom = themeTo; themeTo = Math.max(0, Math.min(THEMES.length - 1, theme)); themeK = 0; }
-        showDecor(Math.max(0, Math.min(3, theme)));
+        showDecor(Math.max(0, Math.min(3, dec ?? theme)));
       });
     },
+    setPickups(list) { ready.then(() => setPickups(list)); },
+    boost(sec) { boostT = sec; },
+    setSpeedScale(k) { speedScale = Math.max(0.25, Math.min(1, k)); },
+    get length() { return L; },
     setAuto(on) { autopilot = on; if (on) { introMode = false; } },
     setPaused(p) { paused = p; if (p) keys.clear(); sfx.engine(rpm, 0, 0, p); },
     celebrate() {

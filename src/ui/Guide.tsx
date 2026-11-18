@@ -2,20 +2,20 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Download, FileText, Flag, LayoutGrid, MessageCircle, Play, RotateCcw, Route, X } from "lucide-react";
 import { A, JOURNEY } from "../data";
 import type { StationId } from "../content";
+import { SECTIONS } from "./Sections";
 import type { ZoneId } from "../scene/garage";
 
 export interface TourStep { target: StationId | null; zone?: ZoneId; title: string; text: string; stat?: string; statLabel?: string; open?: boolean }
 
 /** A 60-second walk through the garage, told in my own voice. */
 export const TOUR: TourStep[] = [
-  { target: "driver", title: "Hi, I'm Sumahar.", text: "Mechanical engineer turned operator. This garage is my career: every object opens something I actually built." },
-  { target: "journey", title: "The road so far", text: "VIT engineer → Myntra intern → Wipro → founding team at Rabbit Invest → Masters' Union. Every stop is on this map." },
-  { target: "brakes", title: "My signature fix", text: "Investor data nobody trusted. I built the checks that stop bad data before it moves.", stat: "50→95%", statLabel: "data accuracy" },
-  { target: "engine", title: "Work that runs itself", text: "I built Rabbit Invest's operations from zero as a founding member, then automated the repetitive work.", stat: "80%", statLabel: "manual ops automated" },
-  { target: "accelerator", title: "Growth with numbers", text: "Dashboards that showed where leads dropped. Conversion went from 10% to 50%.", stat: "5×", statLabel: "sales conversion" },
-  { target: "board", title: "What I've built at Masters' Union", text: "Live products, national case competitions and coursework. The big ones are up top." },
-  { target: "powerbox", title: "The data underneath", text: "Flip this switch any time to see the data wiring under every part of the car." },
-  { target: null, title: "Your turn.", text: "Take the buggy out: four laps, four chapters of my career, each summed up for the role you're hiring for. Autopilot can drive." },
+  { target: "journey", title: "💼 Work-ex", text: "Myntra intern, then Wipro, then the founding team at Rabbit Invest, where I built operations from zero and was promoted to Lead.", stat: "50→95%", statLabel: "data accuracy at Rabbit Invest" },
+  { target: "brakes", title: "The car is my work", text: "Each part of the buggy is a job I did. The brakes are the data checks I built; open any part for the full story.", stat: "80%", statLabel: "manual ops automated" },
+  { target: "driver", title: "🎓 Education", text: "Mechanical engineering at VIT, where I designed the brakes on our BAJA buggy. Now the PGP at Masters' Union." },
+  { target: "trophies", title: "🏆 Achievements", text: "BAJA All India Rank 8, Round 2 of The Ken's case competition, a deadlift first place and more.", stat: "AIR 8", statLabel: "BAJA SAE India" },
+  { target: "crew", title: "🎯 Co-curriculars", text: "I lead the AI & Analytics Wing, ran a stall for our D2C brand Decco, and compete in national cases." },
+  { target: "laptop", title: "✉️ Contact", text: "Email, WhatsApp, LinkedIn and my CV are here, and you can ask me anything." },
+  { target: null, title: "Now drive it.", text: "Four laps, four business functions: strategy, marketing, ops and finance, with data under all of them. Autopilot can drive." },
 ];
 
 export function GuideCard({ step, i, n, onNext, onBack, onClose, onOpen, onDrive }: { step: TourStep; i: number; n: number; onNext: () => void; onBack: () => void; onClose: () => void; onOpen: () => void; onDrive: () => void }) {
@@ -98,7 +98,7 @@ export function HelpMenu({ open, setOpen, onTour, onProjects, onDrive, onAsk, on
 }
 
 /** The first thing a visitor sees once the shutter is up: who I am, my road so far, and four clear ways in. */
-export function QuickView({ onTour, onProjects, onJourney, onDrive, onClose }: { onTour: () => void; onProjects: () => void; onJourney: () => void; onDrive: () => void; onClose: () => void }) {
+export function QuickView({ onTour, onProjects, onJourney, onDrive, onClose, onSection, onStory }: { onTour: () => void; onProjects: () => void; onJourney: () => void; onDrive: () => void; onClose: () => void; onSection: (station: StationId) => void; onStory: () => void }) {
   const big = "flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors";
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-auto absolute inset-0 z-[35] grid place-items-center overflow-y-auto bg-black/35 p-4">
@@ -131,13 +131,24 @@ export function QuickView({ onTour, onProjects, onJourney, onDrive, onClose }: {
             <div key={l} className="rounded-lg bg-white/[.04] px-2 py-2"><div className="font-stencil text-[22px] leading-none text-hazard">{b}</div><div className="mt-1 text-[11.5px] leading-tight text-paper/60">{l}</div></div>
           ))}
         </div>
+        <div className="mt-3 font-mono text-[10px] tracking-[0.2em] text-paper/55">IN THE GARAGE</div>
+        <div className="mt-1.5 grid grid-cols-5 gap-1.5">
+          {SECTIONS.map((x) => (
+            <button key={x.id} type="button" onClick={() => onSection(x.station as StationId)} className="rounded-lg border border-white/15 bg-white/[.03] px-1 py-2 text-center hover:border-hazard">
+              <div className="text-[18px] leading-none">{x.emoji}</div><div className="mt-1 font-cond text-[13px] font-semibold leading-tight">{x.label}</div>
+            </button>
+          ))}
+        </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <button type="button" onClick={onTour} className={`${big} border-transparent bg-hazard text-ink hover:brightness-110`}><Play size={18} /><span><span className="block font-mono text-[12px] font-bold tracking-wider">60-SECOND TOUR</span><span className="block text-[12px] opacity-75">I'll walk you through it</span></span></button>
           <button type="button" onClick={onProjects} className={`${big} border-white/20 hover:border-hazard`}><LayoutGrid size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">MY PROJECTS</span><span className="block text-[12px] text-paper/60">The big five, then the rest</span></span></button>
           <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className={`${big} border-white/20 hover:border-hazard`}><Download size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">DOWNLOAD CV</span><span className="block text-[12px] text-paper/60">One page, PDF</span></span></a>
-          <button type="button" onClick={onDrive} className={`${big} border-white/20 hover:border-hazard`}><Flag size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">TEST-DRIVE ME</span><span className="block text-[12px] text-paper/60">4 laps, 4 chapters · autopilot if you like</span></span></button>
+          <button type="button" onClick={onDrive} className={`${big} border-white/20 hover:border-hazard`}><Flag size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">TEST-DRIVE ME</span><span className="block text-[12px] text-paper/60">Drive to learn what I do, or auto-run</span></span></button>
         </div>
-        <button type="button" onClick={onClose} className="mx-auto mt-3 block font-mono text-[11px] tracking-wider text-paper/55 underline decoration-white/25 underline-offset-4 hover:text-paper">I'LL LOOK AROUND THE GARAGE MYSELF</button>
+        <div className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-1">
+          <button type="button" onClick={onStory} className="font-mono text-[11px] tracking-wider text-hazard underline decoration-hazard/40 underline-offset-4">▶ HEAR MY STORY AGAIN</button>
+          <button type="button" onClick={onClose} className="font-mono text-[11px] tracking-wider text-paper/55 underline decoration-white/25 underline-offset-4 hover:text-paper">I'LL LOOK AROUND MYSELF</button>
+        </div>
       </motion.div>
     </motion.div>
   );

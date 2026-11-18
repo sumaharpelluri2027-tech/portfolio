@@ -6,8 +6,8 @@ import { EMAIL, LINKS, WHATSAPP } from "../data";
 const ROLES = ["Founder's Office", "Data / BI", "Product", "Strategy & Ops"];
 
 /** A ready-to-send message: the visitor fills four blanks and it opens in their email or WhatsApp. */
-export default function HireForm() {
-  const [f, setF] = useState({ name: "", company: "", title: "", role: "Founder's Office", jd: "" });
+export default function HireForm({ role = "Founder's Office" }: { role?: string }) {
+  const [f, setF] = useState({ name: "", company: "", title: "", role, jd: "" });
   const [copied, setCopied] = useState(false);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 

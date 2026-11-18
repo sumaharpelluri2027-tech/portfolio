@@ -28,6 +28,8 @@ export interface TrackAPI {
   setPaused(p: boolean): void;
   /** let the car drive itself round the lap */
   setAuto(on: boolean): void;
+  /** start a new stage: relabel the gates (matched by id), reset which are cleared, and move the sky to another time of day (0 dawn · 1 day · 2 sunset · 3 night) */
+  setStage(specs: GateSpec[], theme: number): void;
   resetCar(): void;
   teleportToGate(id: GateId): void;
   dispose(): void;
@@ -217,16 +219,17 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       zen: { value: new THREE.Color(0x2a1660) }, mid: { value: new THREE.Color(0x9a2f8e) },
       hor: { value: new THREE.Color(0xff7a4a) }, sunC: { value: new THREE.Color(0xffc76a) },
       sunDir: { value: SUN_SKY.clone() }, fogC: { value: FOG.clone() }, uTime: { value: 0 }, uDim: { value: 0 },
+      side: { value: new THREE.Color(0.86, 0.34, 0.55) }, hot: { value: new THREE.Color(0.98, 0.44, 0.16) }, cLit: { value: new THREE.Color(1, 0.52, 0.55) }, cGold: { value: new THREE.Color(1, 0.82, 0.5) }, cDark: { value: new THREE.Color(0.42, 0.2, 0.5) },
     },
     vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }",
-    fragmentShader: `uniform vec3 zen, mid, hor, sunC, sunDir, fogC; uniform float uTime, uDim; varying vec3 vDir;
+    fragmentShader: `uniform vec3 zen, mid, hor, sunC, sunDir, fogC, side, hot, cLit, cGold, cDark; uniform float uTime, uDim; varying vec3 vDir;
       float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
         return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
       float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < OCT; i++){ s += a*noise(p); p = p*2.03 + 7.1; a *= .5; } return s; }
       void main(){ vec3 d = normalize(vDir); float h = d.y;
         vec2 hz = normalize(d.xz + 1e-5); float az = dot(hz, normalize(sunDir.xz)) * .5 + .5; // 1 = towards the sun
-        vec3 horC = mix(mix(vec3(.86,.34,.55), hor, az), vec3(.98,.44,.16), pow(az, 6.));
+        vec3 horC = mix(mix(side, hor, az), hot, pow(az, 6.));
         vec3 c = mix(horC, mid, smoothstep(0.0, 0.28, h)); c = mix(c, zen, smoothstep(0.22, 0.85, h));
         float a = max(dot(d, sunDir), 0.);
         c += sunC * (pow(a, 8.) * .16 + pow(a, 90.) * .38) * (1. - smoothstep(0., .6, h));
@@ -236,7 +239,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
           float n = fbm(p * .9 + vec2(uTime * .006, 0.));
           float m = smoothstep(.5, .72, n) * smoothstep(0., .07, h) * (1. - smoothstep(.45, .8, h));
           float lit = smoothstep(.45, .85, fbm(p * .9 + vec2(uTime * .006, 0.) + normalize(sunDir.xz) * .18));
-          vec3 cc = mix(vec3(.42,.2,.5), mix(vec3(1.,.52,.55), vec3(1.,.82,.5), az), .35 + .65 * (1. - lit));
+          vec3 cc = mix(cDark, mix(cLit, cGold, az), .35 + .65 * (1. - lit));
           cc += sunC * pow(a, 10.) * .5;
           c = mix(c, cc, m * .85);
         }
@@ -249,6 +252,24 @@ export function createTrack(opts: TrackOptions): TrackAPI {
         gl_FragColor = vec4(c, 1.); }`,
     side: THREE.BackSide, depthWrite: false, fog: false,
   });
+  /** four times of day, one per stage */
+  const THEMES = [
+    { zen: 0x34488f, mid: 0xe58fb0, hor: 0xffc38f, sunC: 0xfff0c8, fog: 0xf0b6ae, side: 0xe7a0b8, hot: 0xffc070, cLit: 0xffd2d8, cGold: 0xfff0c8, cDark: 0x8a6a9a, hs: 0xffd6e0, hg: 0x6a5a40, hi: 1.45, kc: 0xffe2c4, ki: 2.8 },
+    { zen: 0x1f5fd0, mid: 0x6aa8ee, hor: 0xcfe8ff, sunC: 0xffffff, fog: 0xb8d6f2, side: 0xa8cdf2, hot: 0xfff4d8, cLit: 0xffffff, cGold: 0xfffbea, cDark: 0x9fb2c8, hs: 0xdcecff, hg: 0x5f7044, hi: 1.7, kc: 0xfff8ec, ki: 3.2 },
+    { zen: 0x2a1660, mid: 0x9a2f8e, hor: 0xff7a4a, sunC: 0xffc76a, fog: 0xd8808a, side: 0xdb578c, hot: 0xfa7029, cLit: 0xff858c, cGold: 0xffd180, cDark: 0x6b3380, hs: 0xffb3c6, hg: 0x6a4a2e, hi: 1.35, kc: 0xffc08a, ki: 2.7 },
+    { zen: 0x040822, mid: 0x18205e, hor: 0x5a3b9a, sunC: 0xc8d8ff, fog: 0x2c2a5c, side: 0x3a2f7a, hot: 0x8a6ad0, cLit: 0x6a6ab0, cGold: 0x9a9ad8, cDark: 0x141838, hs: 0x8a9cff, hg: 0x241a38, hi: 1.05, kc: 0xa8b8ff, ki: 1.9 },
+  ];
+  let themeFrom = 2, themeTo = 2, themeK = 1;
+  const tmpCa = new THREE.Color(), tmpCb = new THREE.Color();
+  function applyTheme(k: number) {
+    const a = THEMES[themeFrom], b = THEMES[themeTo];
+    const mixC = (x: number, y: number, out: THREE.Color) => out.copy(tmpCa.set(x)).lerp(tmpCb.set(y), k);
+    const u = skyMat.uniforms;
+    for (const key of ["zen", "mid", "hor", "sunC", "side", "hot", "cLit", "cGold", "cDark"] as const) mixC(a[key], b[key], u[key].value);
+    mixC(a.fog, b.fog, u.fogC.value); mixC(a.fog, b.fog, scene.fog!.color); (scene.background as THREE.Color).copy(scene.fog!.color);
+    mixC(a.hs, b.hs, hemi.color); mixC(a.hg, b.hg, hemi.groundColor); hemi.intensity = a.hi + (b.hi - a.hi) * k;
+    mixC(a.kc, b.kc, moon.color); moon.intensity = a.ki + (b.ki - a.ki) * k;
+  }
   const skyGroup = new THREE.Group(); scene.add(skyGroup);
   const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), skyMat); sky.renderOrder = -10; skyGroup.add(sky);
   {
@@ -764,7 +785,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     spec: GateSpec; s: number; i: number; banner: THREE.MeshStandardMaterial; beam: THREE.MeshBasicMaterial; glow: THREE.MeshBasicMaterial;
     ground: THREE.MeshBasicMaterial; beacon: THREE.MeshStandardMaterial; armed: boolean; prevDs: number; centre: THREE.Vector3;
     color: THREE.Color; strip: THREE.MeshBasicMaterial; check: THREE.MeshBasicMaterial; flash: number;
-    beamA: THREE.Vector3; beamB: THREE.Vector3; fwd: THREE.Vector3;
+    beamA: THREE.Vector3; beamB: THREE.Vector3; fwd: THREE.Vector3; n: number; tex: THREE.CanvasTexture;
   }
   const gates: GateRT[] = [];
   function gateS(n: number): number[] {
@@ -794,8 +815,12 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       const si = new THREE.Mesh(new THREE.BoxGeometry(0.02, 4.4, 0.07), strip); si.position.set(x - Math.sign(x) * 0.185, 3.5, 0); g.add(si);
       for (const dz of [-1.4, 1.4]) coneSpots.push(g.localToWorld(new THREE.Vector3(x + Math.sign(x) * 0.5, 0, dz)));
     }
-    const tex = canvasTex(1536, 300, (k) => {
-      const w = 1536, h = 300;
+    const tex = canvasTex(1536, 300, (k) => drawBanner(k, spec, n, hex));
+    const banner = new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4, roughness: 0.65 });
+    buildGateRest(g, spec, n, s, i, xl, xr, span, cx, color, beacon, strip, banner, tex);
+  }
+  function drawBanner(k: CanvasRenderingContext2D, spec: GateSpec, n: number, hex: string) {
+      const w = 1536, h = 300; k.clearRect(0, 0, w, h); setSpacing(k, 0);
       const gr = k.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, "#241a3a"); gr.addColorStop(1, "#120d1e"); k.fillStyle = gr; k.fillRect(0, 0, w, h);
       // colour wash from the number block
       const wash = k.createLinearGradient(0, 0, w * 0.75, 0); wash.addColorStop(0, hex + "88"); wash.addColorStop(1, hex + "00"); k.fillStyle = wash; k.fillRect(0, 0, w, h);
@@ -811,8 +836,9 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       while (k.measureText(spec.label).width > w - 340 && fs > 50) { fs -= 6; k.font = `${fs}px ${STENCIL}`; }
       k.fillStyle = "#fff6ea"; k.textAlign = "left"; k.textBaseline = "alphabetic"; k.fillText(spec.label, 284, 182);
       k.font = `600 42px ${MONO}`; k.fillStyle = hex; setSpacing(k, 9); k.fillText(spec.sub.toUpperCase(), 290, 248);
-    });
-    const banner = new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4, roughness: 0.65 });
+  }
+  function buildGateRest(g: THREE.Group, spec: GateSpec, n: number, s: number, i: number, xl: number, xr: number, span: number, cx: number, color: THREE.Color,
+    beacon: THREE.MeshStandardMaterial, strip: THREE.MeshBasicMaterial, banner: THREE.MeshStandardMaterial, tex: THREE.CanvasTexture) {
     const bw = span - 0.2, bh = bw / 5.12;
     const frame = new THREE.Mesh(new THREE.BoxGeometry(span + 0.3, bh + 0.25, 0.18), darkMat); frame.position.set(cx, 5.9 - bh / 2, 0); frame.castShadow = true; g.add(frame);
     // cleared badge: a green disc with a check, sitting on the banner's right end
@@ -832,7 +858,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
       spec, s, i, banner, beam, glow, ground, beacon, armed: true, prevDs: 0, centre: g.localToWorld(new THREE.Vector3(cx, 2.5, 0)),
       color, strip, check, flash: 0,
       beamA: g.localToWorld(new THREE.Vector3(xl - 0.3, 0.6, 0)), beamB: g.localToWorld(new THREE.Vector3(xr + 0.3, 0.6, 0)),
-      fwd: new THREE.Vector3(tx[i], 0, tz[i]),
+      fwd: new THREE.Vector3(tx[i], 0, tz[i]), n, tex,
     });
   }
   const checkTex = canvasTex(128, 128, (k) => {
@@ -1497,6 +1523,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
     // effects keep running while paused (React may pause behind a finale overlay)
     updateCelebrate(dt, t);
     skyMat.uniforms.uTime.value = t;
+    if (themeK < 1) { themeK = Math.min(1, themeK + dt / 2.5); applyTheme(themeK * themeK * (3 - 2 * themeK)); }
     sfx.engine(rpm, paused ? 0 : lastThr, clamp(Math.hypot(car.vx, car.vz) / VMAX, 0, 1), paused);
     if (!low) bloom.strength = 0.5 + flashK * 0.35 + gateFlash * 0.25;
     teleAcc += dt; teleT += dt;
@@ -1546,7 +1573,7 @@ export function createTrack(opts: TrackOptions): TrackAPI {
         if (auto) touch = { throttle: 0, steer: 0, brake: false };
       },
       /** step only the effects (bursts, fireworks, confetti, flashes) without moving the car */
-      fx(sec: number) { const n = Math.round(sec * 60); for (let k = 0; k < n; k++) { introT += 1 / 60; updateGates(introT, 1 / 60); updateCelebrate(1 / 60, introT); updateCamera(1 / 60); } },
+      fx(sec: number) { const n = Math.round(sec * 60); for (let k = 0; k < n; k++) { introT += 1 / 60; if (themeK < 1) { themeK = Math.min(1, themeK + 1 / 150); applyTheme(themeK * themeK * (3 - 2 * themeK)); } updateGates(introT, 1 / 60); updateCelebrate(1 / 60, introT); updateCamera(1 / 60); } },
       celebrate: () => api.celebrate(),
       sceneTris,
       renderer, scene, camera, car,
@@ -1557,6 +1584,18 @@ export function createTrack(opts: TrackOptions): TrackAPI {
 
   const api: TrackAPI = {
     setInput(i) { touch = { throttle: i.throttle || 0, steer: i.steer || 0, brake: !!i.brake }; },
+    setStage(specs, theme) {
+      ready.then(() => {
+        cleared.length = 0;
+        for (const sp of specs) {
+          const g = gates.find((x) => x.spec.id === sp.id); if (!g) continue;
+          g.spec = sp; if (sp.color) g.color.set(sp.color);
+          const hex = `#${g.color.getHexString()}`; const k = (g.tex.image as HTMLCanvasElement).getContext("2d")!;
+          drawBanner(k, sp, g.n, hex); g.tex.needsUpdate = true; g.flash = 1;
+        }
+        if (theme !== themeTo) { themeFrom = themeTo; themeTo = Math.max(0, Math.min(THEMES.length - 1, theme)); themeK = 0; }
+      });
+    },
     setAuto(on) { autopilot = on; if (on) { introMode = false; } },
     setPaused(p) { paused = p; if (p) keys.clear(); sfx.engine(rpm, 0, 0, p); },
     celebrate() {

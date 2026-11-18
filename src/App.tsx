@@ -242,7 +242,7 @@ function Garage() {
               <Flag className="text-hazard transition-transform group-hover:-rotate-12" size={22} />
               <span className="text-left">
                 <span className="block font-stencil text-[19px] leading-none text-hazard md:text-[24px]">TAKE IT FOR A DRIVE</span>
-                <span className="mt-1 block font-mono text-[10px] tracking-[0.18em] text-paper/70">GET TO KNOW ME IN 1 MINUTE</span>
+                <span className="mt-1 block font-mono text-[10px] tracking-[0.18em] text-paper/70">4 LAPS · 4 CHAPTERS OF MY CAREER</span>
               </span>
             </span>
           </motion.button>

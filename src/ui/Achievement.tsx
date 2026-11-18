@@ -3,10 +3,12 @@ import { motion } from "framer-motion";
 import { ArrowRight, Trophy, X } from "lucide-react";
 import { A } from "../data";
 import { TRAITS } from "../traits";
+import { ROLES, STAGES, type RoleId } from "../stages";
 import HireForm from "./Hire";
 
 /** The ending: hiring Sumahar is the achievement the visitor unlocks. */
-export default function Achievement({ how, lap, onClose }: { how: "garage" | "track"; lap?: string | null; onClose: () => void }) {
+export default function Achievement({ how, role, onClose }: { how: "garage" | "track"; lap?: string | null; role?: RoleId; onClose: () => void }) {
+  const rl = ROLES.find((r) => r.id === role);
   const [claim, setClaim] = useState(false);
   const cv = useRef<HTMLCanvasElement>(null);
 
@@ -47,8 +49,19 @@ export default function Achievement({ how, lap, onClose }: { how: "garage" | "tr
             </motion.div>
             <h2 className="mt-3 font-stencil text-[clamp(30px,4.2vw,46px)] leading-[0.95]">{how === "track" ? "YOU JUST TEST‑DROVE" : "YOU FOUND"}<br /><span className="text-hazard">YOUR NEXT HIRE.</span></h2>
             <p className="mt-3 text-[15.5px] text-paper/80">
-              {how === "track" ? "Meter full: you know me 100% now. " : ""}Here's what I'd bring to your team:
+              {how === "track" ? "Four laps, four chapters: you know me now. " : ""}{rl && role !== "general" ? <>Here's why I fit your <b className="text-paper">{rl.label}</b> role:</> : "Here's what I'd bring to your team:"}
             </p>
+            {role ? (
+              <ul className="mt-3 space-y-1.5">
+                {STAGES.map((st, k) => (
+                  <motion.li key={st.n} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 + k * 0.14 }}
+                    className="rounded-lg bg-white/[.05] px-3 py-2" style={{ boxShadow: `inset 3px 0 0 ${st.color}` }}>
+                    <div className="flex items-center gap-2"><span>{st.emoji}</span><span className="text-[13.5px] font-semibold">{st.trait}</span><span className="ml-auto font-stencil text-[13px]" style={{ color: st.color }}>{st.result[0]}</span></div>
+                    <div className="mt-0.5 text-[12.5px] leading-snug text-paper/70">{st.fit[role]}</div>
+                  </motion.li>
+                ))}
+              </ul>
+            ) : (
             <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {TRAITS.map((t, k) => (
                 <motion.div key={t.gate} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.7 + k * 0.12, type: "spring", stiffness: 260, damping: 16 }}
@@ -59,8 +72,9 @@ export default function Achievement({ how, lap, onClose }: { how: "garage" | "tr
                 </motion.div>
               ))}
             </div>
+            )}
             {claim ? (
-              <div className="mt-5 border-t border-white/10 pt-4"><HireForm /></div>
+              <div className="mt-5 border-t border-white/10 pt-4"><HireForm role={rl?.hire} /></div>
             ) : (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.7 }} className="mt-5 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={() => setClaim(true)} className="relative inline-flex items-center gap-2 rounded-full bg-hazard px-6 py-3 font-mono text-[13px] font-bold tracking-wider text-ink shadow-[0_0_30px_rgba(242,183,5,.5)] hover:brightness-110">

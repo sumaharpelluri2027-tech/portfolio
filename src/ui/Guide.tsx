@@ -15,7 +15,7 @@ export const TOUR: TourStep[] = [
   { target: "accelerator", title: "Growth with numbers", text: "Dashboards that showed where leads dropped. Conversion went from 10% to 50%.", stat: "5×", statLabel: "sales conversion" },
   { target: "board", title: "What I've built at Masters' Union", text: "Live products, national case competitions and coursework. The big ones are up top." },
   { target: "powerbox", title: "The data underneath", text: "Flip this switch any time to see the data wiring under every part of the car." },
-  { target: null, title: "Your turn.", text: "Take the buggy for a lap. Every gate shows you something about me, and the finish line has a surprise." },
+  { target: null, title: "Your turn.", text: "Take the buggy out: four laps, four chapters of my career, each summed up for the role you're hiring for. Autopilot can drive." },
 ];
 
 export function GuideCard({ step, i, n, onNext, onBack, onClose, onOpen, onDrive }: { step: TourStep; i: number; n: number; onNext: () => void; onBack: () => void; onClose: () => void; onOpen: () => void; onDrive: () => void }) {
@@ -135,7 +135,7 @@ export function QuickView({ onTour, onProjects, onJourney, onDrive, onClose }: {
           <button type="button" onClick={onTour} className={`${big} border-transparent bg-hazard text-ink hover:brightness-110`}><Play size={18} /><span><span className="block font-mono text-[12px] font-bold tracking-wider">60-SECOND TOUR</span><span className="block text-[12px] opacity-75">I'll walk you through it</span></span></button>
           <button type="button" onClick={onProjects} className={`${big} border-white/20 hover:border-hazard`}><LayoutGrid size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">MY PROJECTS</span><span className="block text-[12px] text-paper/60">The big five, then the rest</span></span></button>
           <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className={`${big} border-white/20 hover:border-hazard`}><Download size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">DOWNLOAD CV</span><span className="block text-[12px] text-paper/60">One page, PDF</span></span></a>
-          <button type="button" onClick={onDrive} className={`${big} border-white/20 hover:border-hazard`}><Flag size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">TEST-DRIVE ME</span><span className="block text-[12px] text-paper/60">One minute, or let autopilot drive</span></span></button>
+          <button type="button" onClick={onDrive} className={`${big} border-white/20 hover:border-hazard`}><Flag size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">TEST-DRIVE ME</span><span className="block text-[12px] text-paper/60">4 laps, 4 chapters · autopilot if you like</span></span></button>
         </div>
         <button type="button" onClick={onClose} className="mx-auto mt-3 block font-mono text-[11px] tracking-wider text-paper/55 underline decoration-white/25 underline-offset-4 hover:text-paper">I'LL LOOK AROUND THE GARAGE MYSELF</button>
       </motion.div>

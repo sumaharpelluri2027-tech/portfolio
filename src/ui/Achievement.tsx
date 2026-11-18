@@ -49,7 +49,7 @@ export default function Achievement({ how, role, onClose }: { how: "garage" | "t
             </motion.div>
             <h2 className="mt-3 font-stencil text-[clamp(30px,4.2vw,46px)] leading-[0.95]">{how === "track" ? "YOU JUST TEST‑DROVE" : "YOU FOUND"}<br /><span className="text-hazard">YOUR NEXT HIRE.</span></h2>
             <p className="mt-3 text-[15.5px] text-paper/80">
-              {how === "track" ? "Four laps, four chapters: you know me now. " : ""}{rl && role !== "general" ? <>Here's why I fit your <b className="text-paper">{rl.label}</b> role:</> : "Here's what I'd bring to your team:"}
+              {how === "track" ? "Four calls, four functions: you know how I work now. " : ""}{rl && role !== "general" ? <>Here's why I fit your <b className="text-paper">{rl.label}</b> role:</> : "Here's what I'd bring to your team:"}
             </p>
             {role ? (
               <ul className="mt-3 space-y-1.5">

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronUp, Download, Lightbulb, FileText, Route, Flag, LayoutGrid, MessageCircle, Music2, Pause, X } from "lucide-react";
+import { ArrowRight, ChevronUp, Download, Lightbulb, FileText, Route, Flag, LayoutGrid, MessageCircle, Music2, Pause, X } from "lucide-react";
 import { GuideCard, HelpMenu, QuickView, TOUR } from "./ui/Guide";
 import { createGarage, type GarageAPI } from "./scene/garage";
 import { createBuggy } from "./scene/buggyEntry";
@@ -262,17 +262,28 @@ function Garage() {
       {/* the big call: take it for a drive */}
       <AnimatePresence>
         {live && !open && !xray && !board && guide === "help" && (
-          <motion.button type="button" onClick={goDrive} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: 0.5 }}
-            className="group absolute left-1/2 top-[78px] z-20 -translate-x-1/2 overflow-hidden rounded-xl p-[2px] shadow-[0_0_50px_rgba(242,183,5,.35)] md:bottom-7 md:top-auto">
-            <span className="hazard absolute inset-0 animate-[spin_6s_linear_infinite] opacity-90 [background-size:200%_200%]" aria-hidden="true" />
-            <span className="relative flex items-center gap-3 rounded-[10px] bg-ink px-5 py-3 md:px-7">
-              <Flag className="text-hazard transition-transform group-hover:-rotate-12" size={22} />
-              <span className="text-left">
-                <span className="block font-stencil text-[19px] leading-none text-hazard md:text-[24px]">TAKE IT FOR A DRIVE</span>
-                <span className="mt-1 block font-mono text-[10px] tracking-[0.18em] text-paper/70">4 LAPS · 4 CHAPTERS OF MY CAREER</span>
+          <div key="drive-cta" className="pointer-events-none absolute inset-x-0 top-[78px] z-20 flex justify-center px-4 md:bottom-6 md:top-auto">
+            <motion.button type="button" onClick={goDrive} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ delay: 0.5, type: "spring", stiffness: 220, damping: 20 }}
+              whileHover={{ y: -3 }} className="group pointer-events-auto relative overflow-hidden rounded-2xl p-[2px] shadow-[0_0_50px_rgba(242,183,5,.35)]">
+              <span className="hazard absolute inset-0 animate-[spin_6s_linear_infinite] opacity-90 [background-size:200%_200%]" aria-hidden="true" />
+              <span className="relative flex items-center gap-4 rounded-[14px] bg-ink px-4 py-2.5 md:px-5 md:py-3">
+                <span className="relative grid h-12 w-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-hazard/15" aria-hidden="true">
+                  <motion.span animate={{ x: [-8, 8, -8], rotate: [0, -6, 0, 4, 0] }} transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }} className="text-[26px]">🏎️</motion.span>
+                  <span className="absolute inset-x-1 bottom-1.5 h-[2px] rounded bg-hazard/50" />
+                </span>
+                <span className="text-left">
+                  <span className="block font-stencil text-[20px] leading-none text-hazard md:text-[25px]">TAKE IT FOR A DRIVE</span>
+                  <span className="mt-1 block font-mono text-[10px] tracking-[0.16em] text-paper/75">THINK LIKE A FOUNDER · 4 QUICK GAMES · 2 MIN</span>
+                  <span className="mt-1.5 hidden gap-1 sm:flex">
+                    {[["🧭", "Strategy", "#4fc3f7"], ["🚀", "Marketing", "#ff7043"], ["⚙️", "Ops", "#ffca28"], ["⛽", "Finance", "#66bb6a"], ["📊", "Data", "#36c8ff"]].map(([e, l, c]) => (
+                      <span key={l} className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: c + "22", color: c, border: `1px solid ${c}55` }}>{e} {l}</span>
+                    ))}
+                  </span>
+                </span>
+                <ArrowRight className="shrink-0 text-hazard transition-transform group-hover:translate-x-1" size={22} />
               </span>
-            </span>
-          </motion.button>
+            </motion.button>
+          </div>
         )}
       </AnimatePresence>
 

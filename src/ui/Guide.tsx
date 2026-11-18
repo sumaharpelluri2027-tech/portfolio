@@ -1,35 +1,65 @@
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Download, FileText, Flag, LayoutGrid, MessageCircle, Play, RotateCcw, Route, X } from "lucide-react";
+import * as voice from "../narrate";
+import { ChevronLeft, ChevronRight, Download, FileText, Flag, LayoutGrid, MessageCircle, Pause, Play, RotateCcw, Route, Volume2, VolumeX, X } from "lucide-react";
 import { A, JOURNEY } from "../data";
 import type { StationId } from "../content";
 import { SECTIONS } from "./Sections";
 import type { ZoneId } from "../scene/garage";
 
-export interface TourStep { target: StationId | null; zone?: ZoneId; title: string; text: string; stat?: string; statLabel?: string; open?: boolean }
+export interface TourStep { target: StationId | null; zone?: ZoneId; title: string; lines: { key: string; text: string }[]; stat?: string; statLabel?: string; open?: boolean }
 
-/** A 60-second walk through the garage, told in my own voice. */
+/** A one-minute walk through the garage: short spoken lines, one stop at a time. */
 export const TOUR: TourStep[] = [
-  { target: "journey", title: "💼 Work-ex", text: "Myntra intern, then Wipro, then the founding team at Rabbit Invest, where I built operations from zero and was promoted to Lead.", stat: "50→95%", statLabel: "data accuracy at Rabbit Invest" },
-  { target: "brakes", title: "The car is my work", text: "Each part of the buggy is a job I did. The brakes are the data checks I built; open any part for the full story.", stat: "80%", statLabel: "manual ops automated" },
-  { target: "driver", title: "🎓 Education", text: "Mechanical engineering at VIT, where I designed the brakes on our BAJA buggy. Now the PGP at Masters' Union." },
-  { target: "trophies", title: "🏆 Achievements", text: "BAJA All India Rank 8, Round 2 of The Ken's case competition, a deadlift first place and more.", stat: "AIR 8", statLabel: "BAJA SAE India" },
-  { target: "crew", title: "🎯 Co-curriculars", text: "I lead the AI & Analytics Wing, ran a stall for our D2C brand Decco, and compete in national cases." },
-  { target: "laptop", title: "✉️ Contact", text: "Email, WhatsApp, LinkedIn and my CV are here, and you can ask me anything." },
-  { target: null, title: "Now drive it.", text: "Four laps, four business functions: strategy, marketing, ops and finance, with data under all of them. Autopilot can drive." },
+  { target: "journey", title: "💼 Work-ex", stat: "50→95%", statLabel: "data accuracy at Rabbit Invest", lines: [
+    { key: "tour-1a", text: "This road map is my career." }, { key: "tour-1b", text: "Myntra, then Wipro, then Rabbit Invest." }, { key: "tour-1c", text: "There I built ops from zero, and became Lead." }] },
+  { target: "brakes", title: "🔧 The car is my work", stat: "80%", statLabel: "manual ops automated", lines: [
+    { key: "tour-2a", text: "Each part of this buggy is a job I did." }, { key: "tour-2b", text: "Click any part for the full story." }] },
+  { target: "driver", title: "🎓 Education", lines: [
+    { key: "tour-3a", text: "Mechanical engineer from VIT." }, { key: "tour-3b", text: "Now a PGP at Masters' Union." }] },
+  { target: "trophies", title: "🏆 Achievements", stat: "AIR 8", statLabel: "BAJA SAE India", lines: [
+    { key: "tour-4a", text: "BAJA: All India Rank 8." }, { key: "tour-4b", text: "Case rounds, and a deadlift first place." }] },
+  { target: "crew", title: "🎯 Co-curriculars", lines: [
+    { key: "tour-5a", text: "I lead the AI and Analytics Wing." }, { key: "tour-5b", text: "I also sold for our D2C brand, Decco." }] },
+  { target: "laptop", title: "✉️ Contact", lines: [
+    { key: "tour-6a", text: "My CV, email and WhatsApp are here." }, { key: "tour-6b", text: "Or just ask me anything." }] },
+  { target: null, title: "🏁 Now see how I think", lines: [
+    { key: "tour-7a", text: "Four quick games. One founder's call each." }, { key: "tour-7b", text: "Then I tell you what I actually did." }] },
 ];
 
 export function GuideCard({ step, i, n, onNext, onBack, onClose, onOpen, onDrive }: { step: TourStep; i: number; n: number; onNext: () => void; onBack: () => void; onClose: () => void; onOpen: () => void; onDrive: () => void }) {
   const last = i === n - 1;
+  const [line, setLine] = useState(-1);
+  const [heard, setHeard] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [talk, setTalk] = useState(!voice.isMuted());
+  // speak this stop's lines; then move on by itself (unless paused, or it's the last stop)
+  useEffect(() => {
+    let alive = true;
+    voice.sayAll(step.lines, (k) => { if (alive) setLine(k); }).then((ok) => { if (alive && ok !== false) { setLine(step.lines.length); setHeard(true); } });
+    return () => { alive = false; voice.stop(); };
+  }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nextRef = useRef(onNext); nextRef.current = onNext;
+  useEffect(() => { if (!heard || paused || last) return; const id = window.setTimeout(() => nextRef.current(), 900); return () => window.clearTimeout(id); }, [heard, paused, last]);
   return (
     <motion.div key={i} initial={{ opacity: 0, y: 16, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: 0.35 }}
       role="dialog" aria-label={`Tour step ${i + 1} of ${n}`}
-      className="pointer-events-auto relative w-[min(380px,calc(100vw-32px))] rounded-2xl border border-hazard/50 bg-oil/95 p-4 pr-5 shadow-[0_20px_60px_rgba(0,0,0,.6)] backdrop-blur">
-      <button type="button" onClick={onClose} aria-label="End the tour" className="absolute right-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-full text-paper/60 hover:bg-white/10 hover:text-paper"><X size={14} /></button>
-      <div className="flex gap-3">
-        <img src={A("me/avatar.webp")} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-hazard" />
+      className="pointer-events-auto relative w-[min(420px,calc(100vw-32px))] overflow-hidden rounded-2xl border border-hazard/60 bg-oil/95 p-4 pr-5 shadow-[0_20px_60px_rgba(0,0,0,.6),0_0_40px_rgba(242,183,5,.18)] backdrop-blur">
+      <div className="absolute inset-x-0 top-0 flex gap-1 p-1.5">{Array.from({ length: n }).map((_, k) => (
+        <span key={k} className="h-1 flex-1 overflow-hidden rounded-full bg-white/15"><motion.span className="block h-full bg-hazard" initial={false} animate={{ width: k < i ? "100%" : k === i ? `${Math.max(0, Math.min(1, (line + (heard ? 1 : 0.5)) / step.lines.length)) * 100}%` : "0%" }} transition={{ duration: 0.6 }} /></span>
+      ))}</div>
+      <div className="absolute right-2.5 top-4 flex gap-1">
+        <button type="button" onClick={() => { const v = !talk; setTalk(v); voice.setMuted(!v); }} aria-label={talk ? "Mute the narrator" : "Turn the narrator on"} className="grid h-7 w-7 place-items-center rounded-full text-paper/60 hover:bg-white/10 hover:text-paper">{talk ? <Volume2 size={14} /> : <VolumeX size={14} />}</button>
+        <button type="button" onClick={onClose} aria-label="End the tour" className="grid h-7 w-7 place-items-center rounded-full text-paper/60 hover:bg-white/10 hover:text-paper"><X size={14} /></button>
+      </div>
+      <div className="mt-2 flex gap-3">
+        <span className="relative h-12 w-12 shrink-0">
+          <img src={A("me/avatar.webp")} alt="" className="h-12 w-12 rounded-full object-cover ring-2 ring-hazard" />
+          {!heard && talk && <motion.span className="absolute -inset-1 rounded-full border-2 border-hazard" animate={{ scale: [1, 1.15, 1], opacity: [0.8, 0, 0.8] }} transition={{ repeat: Infinity, duration: 1.2 }} />}
+        </span>
         <div className="min-w-0">
           <div className="font-mono text-[10px] tracking-[0.2em] text-hazard">TOUR · {i + 1}/{n}</div>
-          <div className="font-cond text-[21px] font-semibold leading-tight">{step.title}</div>
+          <div className="font-cond text-[22px] font-semibold leading-tight">{step.title}</div>
         </div>
       </div>
       {step.stat && (
@@ -38,13 +68,16 @@ export function GuideCard({ step, i, n, onNext, onBack, onClose, onOpen, onDrive
           <span className="font-mono text-[11px] text-paper/60">{step.statLabel}</span>
         </div>
       )}
-      <p className="mt-2 text-[15px] leading-snug text-paper/85">{step.text}</p>
+      <ul className="mt-2 space-y-1">
+        {step.lines.map((l, k) => <motion.li key={l.key} animate={{ opacity: line >= k ? 1 : 0.3 }} className={`text-[15.5px] leading-snug ${line === k ? "font-semibold text-paper" : "text-paper/85"}`}>{l.text}</motion.li>)}
+      </ul>
       <div className="mt-4 flex items-center gap-2">
-        <div className="mr-auto flex gap-1">{Array.from({ length: n }).map((_, k) => <span key={k} className={`h-1.5 rounded-full transition-all ${k === i ? "w-5 bg-hazard" : "w-1.5 bg-white/25"}`} />)}</div>
         {i > 0 && <button type="button" onClick={onBack} aria-label="Previous step" className="grid h-9 w-9 place-items-center rounded-full border border-white/20 hover:border-white/50"><ChevronLeft size={16} /></button>}
+        {!last && <button type="button" onClick={() => setPaused(!paused)} aria-label={paused ? "Resume the tour" : "Pause the tour"} className="grid h-9 w-9 place-items-center rounded-full border border-white/20 hover:border-white/50">{paused ? <Play size={14} /> : <Pause size={14} />}</button>}
+        <span className="mr-auto font-mono text-[10px] text-paper/45">{last ? "" : paused ? "PAUSED" : heard ? "NEXT STOP…" : "🔊 LISTENING"}</span>
         {step.target && step.target !== "powerbox" && <button type="button" onClick={onOpen} className="rounded-full border border-white/25 px-3 py-2 font-mono text-[11px] hover:border-hazard">OPEN IT</button>}
         {last ? (
-          <button type="button" onClick={onDrive} className="flex items-center gap-1.5 rounded-full bg-hazard px-4 py-2 font-mono text-[11px] font-bold text-ink"><Flag size={13} /> DRIVE</button>
+          <button type="button" onClick={onDrive} className="flex items-center gap-1.5 rounded-full bg-hazard px-4 py-2 font-mono text-[11px] font-bold text-ink"><Flag size={13} /> PLAY THE 4 GAMES</button>
         ) : (
           <button type="button" onClick={onNext} className="flex items-center gap-1 rounded-full bg-hazard px-4 py-2 font-mono text-[11px] font-bold text-ink">NEXT <ChevronRight size={14} /></button>
         )}
@@ -85,7 +118,7 @@ export function HelpMenu({ open, setOpen, onTour, onProjects, onDrive, onAsk, on
             <button type="button" onClick={onAsk} className={item}><MessageCircle size={15} className="text-hazard" /><span className="text-[14.5px]">Let me ask you something</span></button>
             <button type="button" onClick={onList} className={item}><Route size={15} className="text-hazard" /><span className="text-[14.5px]">My career journey</span></button>
             <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className={item}><FileText size={15} className="text-hazard" /><span className="text-[14.5px]">Download my CV</span></a>
-            <button type="button" onClick={onDrive} className={item}><Flag size={15} className="text-hazard" /><span className="text-[14.5px]">Take the buggy for a lap</span></button>
+            <button type="button" onClick={onDrive} className={item}><Flag size={15} className="text-hazard" /><span className="text-[14.5px]">Take it for a drive: 4 quick games</span></button>
           </motion.div>
         )}
       </AnimatePresence>

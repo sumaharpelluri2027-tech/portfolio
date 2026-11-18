@@ -293,7 +293,6 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     const ram = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.55, 14), steel); ram.rotation.x = 1.25; ram.position.set(s * 0.62, 0.15, -0.95); car.add(ram);
     for (const z of [-1.28, 1.28]) { const stop = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.06, 0.08), rubber); stop.position.set(s * 0.62, LIFT_H + 0.03, z); car.add(stop); }
   }
-  const pump = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.3), liftMat); pump.position.set(-1.25, 0.25, -1.1); car.add(pump);
   const hose = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-1.1, 0.35, -1.1), new THREE.Vector3(-0.95, 0.03, -1.05), new THREE.Vector3(-0.7, 0.05, -0.95)]), 20, 0.015, 6), rubber); car.add(hose);
   shadows(car);
 
@@ -352,28 +351,28 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     if (document.fonts?.load) { try { await Promise.all([document.fonts.load(`80px ${STENCIL}`), document.fonts.load(`40px ${MONO}`)]); REDRAW.splice(0).forEach((r) => r()); } catch { /* ignore */ } }
     // career road map on the front wall, left of the door
     const mapTex = canvasTex(1600, 900, (g) => {
-      g.fillStyle = "#efe7d4"; g.fillRect(0, 0, 1600, 900);
-      g.strokeStyle = "rgba(0,0,0,.06)"; g.lineWidth = 2; for (let x = 0; x < 1600; x += 80) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 900); g.stroke(); } for (let y = 0; y < 900; y += 80) { g.beginPath(); g.moveTo(0, y); g.lineTo(1600, y); g.stroke(); }
-      g.fillStyle = "#15120f"; g.font = `76px ${STENCIL}`; g.textAlign = "left"; g.textBaseline = "alphabetic"; g.fillText("THE ROAD SO FAR", 60, 110);
-      g.font = `500 28px ${MONO}`; g.fillStyle = "#6b5f4e"; g.fillText("ENGINEER → ANALYST → OPERATOR → BUILDER", 64, 158);
+      g.fillStyle = "#14202c"; g.fillRect(0, 0, 1600, 900);
+      g.strokeStyle = "rgba(255,255,255,.05)"; g.lineWidth = 2; for (let x = 0; x < 1600; x += 80) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 900); g.stroke(); } for (let y = 0; y < 900; y += 80) { g.beginPath(); g.moveTo(0, y); g.lineTo(1600, y); g.stroke(); }
+      g.fillStyle = "#f4efe2"; g.font = `76px ${STENCIL}`; g.textAlign = "left"; g.textBaseline = "alphabetic"; g.fillText("THE ROAD SO FAR", 60, 110);
+      g.font = `500 28px ${MONO}`; g.fillStyle = "#9fb4c8"; g.fillText("ENGINEER → ANALYST → OPERATOR → BUILDER", 64, 158);
       const P: [number, number, string, string, string][] = [[150, 700, "VIT", "B.TECH · → 2022", "#2a5fb8"], [430, 470, "MYNTRA", "INTERN · 2022", "#e0457b"], [720, 640, "WIPRO", "2022 – 2024", "#5b3fa0"], [1010, 400, "RABBIT INVEST", "2024 – 2026", "#1f9d6b"], [1300, 560, "MASTERS' UNION", "NOW · '27", "#d98e04"]];
       g.lineCap = "round"; g.lineJoin = "round";
       const path = () => { g.beginPath(); g.moveTo(P[0][0], P[0][1]); for (let i = 1; i < P.length; i++) { const [x0, y0] = P[i - 1], [x1, y1] = P[i]; g.bezierCurveTo((x0 + x1) / 2, y0, (x0 + x1) / 2, y1, x1, y1); } g.lineTo(1530, 300); };
-      g.strokeStyle = "#2d2925"; g.lineWidth = 46; path(); g.stroke();
+      g.strokeStyle = "#060a0f"; g.lineWidth = 50; path(); g.stroke(); g.strokeStyle = "#2b3440"; g.lineWidth = 42; path(); g.stroke();
       g.strokeStyle = "#f2b705"; g.lineWidth = 5; g.setLineDash([26, 22]); path(); g.stroke(); g.setLineDash([]);
       P.forEach(([x, y, t, d, c], i) => {
         g.fillStyle = c; g.beginPath(); g.arc(x, y - 58, 30, Math.PI * 0.15, Math.PI * 0.85, true); g.lineTo(x, y - 6); g.closePath(); g.fill();
         g.fillStyle = "#fff"; g.font = `34px ${STENCIL}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String(i + 1), x, y - 62);
         const up = i % 2 === 1; const ty = up ? y - 130 : y + 60;
-        g.fillStyle = "#15120f"; g.font = `42px ${STENCIL}`; g.fillText(t, x, ty); g.font = `500 24px ${MONO}`; g.fillStyle = "#6b5f4e"; g.fillText(d, x, ty + 36);
+        g.fillStyle = "#f4efe2"; g.font = `42px ${STENCIL}`; g.fillText(t, x, ty); g.font = `500 24px ${MONO}`; g.fillStyle = "#9fb4c8"; g.fillText(d, x, ty + 36);
       });
-      g.fillStyle = "#d63a2f"; g.font = `40px ${STENCIL}`; g.textAlign = "right"; g.fillText("NEXT: YOUR TEAM →", 1560, 260);
+      g.fillStyle = "#ff6a5a"; g.font = `40px ${STENCIL}`; g.textAlign = "right"; g.fillText("NEXT: YOUR TEAM →", 1560, 260);
     });
     const mapG = new THREE.Group();
     const mapFrame = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.75, 0.05), new THREE.MeshStandardMaterial({ color: 0x2b2017, roughness: 0.7 }));
-    const mapFace = new THREE.Mesh(new THREE.PlaneGeometry(2.88, 1.62), new THREE.MeshStandardMaterial({ map: mapTex, roughness: 0.75, emissive: 0xffffff, emissiveMap: mapTex, emissiveIntensity: 0.12 })); mapFace.position.z = 0.03;
+    const mapFace = new THREE.Mesh(new THREE.PlaneGeometry(2.88, 1.62), new THREE.MeshStandardMaterial({ map: mapTex, roughness: 0.75, emissive: 0xffffff, emissiveMap: mapTex, emissiveIntensity: 0.06 })); mapFace.position.z = 0.03;
     mapG.add(mapFrame, mapFace); mapG.scale.setScalar(0.98); mapG.position.set(2.45, 3.3, -4.24); props.add(mapG);
-    const mapLight = new THREE.SpotLight(0xfff1d6, 7, 6, 0.6, 0.6, 1.5); mapLight.position.set(2.45, 4.9, -2.6); mapLight.target = mapG; scene.add(mapLight);
+    const mapLight = new THREE.SpotLight(0xfff1d6, 4, 6, 0.6, 0.6, 1.5); mapLight.position.set(2.45, 4.9, -2.6); mapLight.target = mapG; scene.add(mapLight);
     addStation("journey", mapG, { pos: [2.45, 3.0, -0.8], target: [2.45, 3.3, -4.3] });
     addStation("exit", exitG, { pos: [DOOR.x, 1.8, DOOR.z - 3.2], target: [DOOR.x, 2.0, DOOR.z + 6] });
     const names = ["metal_tool_chest", "hanging_industrial_lamp", "steel_frame_shelves_01", "classic_laptop", "old_tyre", "metal_jerrycan", "oil_tin", "metal_stool_01", "ratchet_wrench", "adjustable_wrench", "korean_fire_extinguisher_01", "power_box_01", "industrial_storage_cart", "mounted_fluorescent_lights"];
@@ -405,11 +404,11 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     // ---- boards made from cork with pinned photos ----
     const imgLoader = new THREE.TextureLoader(manager);
     const corkTex = canvasTex(1024, 640, (g) => {
-      g.fillStyle = "#a97c4f"; g.fillRect(0, 0, 1024, 640);
-      for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${60 + Math.random() * 60},${40 + Math.random() * 40},${20},${Math.random() * 0.35})`; g.fillRect(Math.random() * 1024, Math.random() * 640, 2, 2); }
+      g.fillStyle = "#7a5233"; g.fillRect(0, 0, 1024, 640);
+      for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${40 + Math.random() * 70},${25 + Math.random() * 40},${12},${Math.random() * 0.45})`; g.fillRect(Math.random() * 1024, Math.random() * 640, 2, 2); }
       g.strokeStyle = "#3a2a1c"; g.lineWidth = 26; g.strokeRect(0, 0, 1024, 640);
     });
-    const corkFace = new THREE.MeshStandardMaterial({ map: corkTex, roughness: 1 });
+    const corkFace = new THREE.MeshStandardMaterial({ map: corkTex, roughness: 1, color: 0xd8c8b8 });
     function photo(src: string, w: number, aspect = 0.66) {
       const t = imgLoader.load(src); t.colorSpace = THREE.SRGBColorSpace;
       const g = new THREE.Group();
@@ -456,7 +455,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     // build board on the left wall: every project, as index cards
     const bb = new THREE.Group(); bb.position.set(-6.36, 2.05, 0.95); bb.rotation.y = Math.PI / 2; props.add(bb);
     const bbTex = canvasTex(1600, 900, (g) => {
-      g.fillStyle = "#e9e5dc"; g.fillRect(0, 0, 1600, 900);
+      g.fillStyle = "#d6d0c2"; g.fillRect(0, 0, 1600, 900);
       g.strokeStyle = "rgba(0,0,0,0.06)"; for (let x = 0; x < 1600; x += 40) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 900); g.stroke(); } for (let y = 0; y < 900; y += 40) { g.beginPath(); g.moveTo(0, y); g.lineTo(1600, y); g.stroke(); }
       g.fillStyle = "#14110e"; g.font = `86px ${STENCIL}`; g.fillText("BUILD BOARD", 40, 104);
       g.fillStyle = "#c8261b"; g.font = `600 30px ${MONO}`; g.fillText("MASTERS' UNION · LIVE · CASES · COURSEWORK", 600, 96);
@@ -481,17 +480,14 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     shadows(bb, false, true);
     addStation("board", bb, { pos: [-3.2, 2.0, 0.95], target: [-6.3, 1.95, 0.95] });
 
-    // trophy shelf on the back-right
-    const shelf = M.steel_frame_shelves_01; fitHeight(shelf, 2.15); shelf.rotation.y = -0.1; shelf.position.set(4.7, 0, -3.6); props.add(shelf); sitOnFloor(shelf);
-    const tro = new THREE.Group(); props.add(tro);
-    const shelfB = new THREE.Box3().setFromObject(shelf);
-    const sx = [shelfB.min.x + 0.2, (shelfB.min.x + shelfB.max.x) / 2, shelfB.max.x - 0.25];
-    const levels: number[] = [];
-    for (const yy of [0.9, 1.3, 1.75, 2.2]) {
-      ray.set(new THREE.Vector3((shelfB.min.x + shelfB.max.x) / 2, yy, -3.6), new THREE.Vector3(0, -1, 0));
-      const h = ray.intersectObject(shelf, true)[0]; if (h && !levels.some((l) => Math.abs(l - h.point.y) < 0.15)) levels.push(h.point.y);
-    }
-    const L = (levels.length ? levels : [0.75, 1.2, 1.65]).slice(-3);
+    // trophy stand: a low two-tier podium on the floor right of the lift, in view from the door
+    const stand = new THREE.Group(); stand.position.set(2.5, 0, -2.0); stand.rotation.y = -0.27; props.add(stand);
+    const standMat = new THREE.MeshStandardMaterial({ color: 0x1d1a17, roughness: 0.55, metalness: 0.3 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0xd9a63a, metalness: 0.9, roughness: 0.3 });
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.5, 0.8), standMat); lower.position.set(0, 0.25, 0); stand.add(lower);
+    const upper = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.32, 0.4), standMat); upper.position.set(0, 0.66, -0.2); stand.add(upper);
+    for (const [y, z, d] of [[0.5, 0, 0.8], [0.82, -0.2, 0.4]] as const) { const tr = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.025, d + 0.02), trimMat); tr.position.set(0, y, z); stand.add(tr); }
+    const standPlate = labelPlate("WINS & MILESTONES", 0.9, 0.14); standPlate.position.set(0, 0.27, 0.405); stand.add(standPlate);
     // real wins, each with its own plaque
     const WINS: [string, string, "cup" | "medal" | "plaque"][] = [
       ["BAJA SAE INDIA", "ALL INDIA RANK 8", "cup"], ["DEADLIFT", "1ST PLACE", "medal"], ["THE KEN · CASE", "ROUND 2", "cup"],
@@ -510,26 +506,23 @@ export function createGarage(opt: GarageOptions): GarageAPI {
       return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, roughness: 0.5, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.18 }));
     };
     WINS.forEach(([a, b2, kind], i) => {
-      const y = L[Math.floor(i / 2) % L.length], x = i % 2 ? sx[2] - 0.05 : sx[0] + 0.12;
-      const g = new THREE.Group(); g.position.set(x + (i % 2 ? 0 : 0.05), y, -3.5);
-      if (kind === "cup") { const t = trophy(0.42); t.scale.setScalar(1.25); g.add(t); }
+      const top = i < 3, x = ((i % 3) - 1) * 0.6;
+      const g = new THREE.Group(); g.position.set(x, top ? 0.83 : 0.51, top ? -0.2 : 0.12);
+      if (kind === "cup") { const t = trophy(0.42); t.scale.setScalar(top ? 1.25 : 1.35); g.add(t); }
       else if (kind === "medal") {
-        const stand = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.12), plaqueMat); stand.position.y = 0.02; g.add(stand);
-        const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 32), gold); disc.rotation.x = Math.PI / 2; disc.position.set(0, 0.2, 0); g.add(disc);
-        const rb = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.005), ribbon); rb.position.set(0, 0.36, -0.01); g.add(rb);
+        const st = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.12), plaqueMat); st.position.y = 0.02; g.add(st);
+        const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.022, 32), gold); disc.rotation.x = Math.PI / 2; disc.position.set(0, 0.22, 0); g.add(disc);
+        const rb = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.005), ribbon); rb.position.set(0, 0.38, -0.01); g.add(rb);
       } else {
-        const pl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 0.03), plaqueMat); pl.position.set(0, 0.2, -0.05); pl.rotation.x = -0.12; g.add(pl);
-        const face = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, 0.01), i === 3 ? silver : gold); face.position.set(0, 0.26, -0.025); face.rotation.x = -0.12; g.add(face);
+        const pl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 0.03), plaqueMat); pl.position.set(0, 0.19, -0.04); pl.rotation.x = -0.12; g.add(pl);
+        const face = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, 0.01), i === 3 ? silver : gold); face.position.set(0, 0.25, -0.02); face.rotation.x = -0.12; g.add(face);
       }
-      const pq = plaque(a, b2); pq.position.set(0, 0.06, 0.12); pq.rotation.x = -0.35; g.add(pq);
-      shadows(g); tro.add(g);
+      const pq = plaque(a, b2); pq.position.set(0, top ? 0.0 : 0.0, top ? 0.2 : 0.27); pq.rotation.x = -0.5; pq.position.y = top ? -0.12 : -0.2; g.add(pq);
+      shadows(g); stand.add(g);
     });
-    const trophyGroup = new THREE.Group(); props.add(trophyGroup); trophyGroup.add(shelf, tro);
-    const shelfPlate = labelPlate("WINS", 0.7, 0.2); shelfPlate.position.set(4.62, 2.45, -3.3); trophyGroup.add(shelfPlate);
-    // built against the back wall, then swung onto the right wall: (4.7, -3.6) → (5.7, -2.3), facing −x
-    trophyGroup.rotation.y = -Math.PI / 2; trophyGroup.position.set(5.7 - 3.6, 0, -2.3 - 4.7); trophyGroup.updateMatrixWorld(true);
-    shelfFill.position.set(4.5, 2.7, -2.3);
-    addStation("trophies", trophyGroup, { pos: [3.0, 1.8, -2.3], target: [5.7, 1.4, -2.3] });
+    shadows(stand, true, true);
+    shelfFill.position.set(2.5, 2.3, -1.2);
+    addStation("trophies", stand, { pos: [1.55, 1.6, 0.9], target: [2.5, 0.8, -2.0] });
 
     // tool chest on the left wall
     const chest = M.metal_tool_chest; fitHeight(chest, 1.05); chest.rotation.y = Math.PI / 2; chest.position.set(-5.85, 0, -1.3); props.add(chest); sitOnFloor(chest);
@@ -619,7 +612,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   outline.edgeStrength = 4; outline.edgeGlow = 0.6; outline.edgeThickness = 1.6; outline.pulsePeriod = 2.4;
   outline.visibleEdgeColor.set(0xffc21a); outline.hiddenEdgeColor.set(0x6b4d00);
   composer.addPass(outline);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(W() / 2, H() / 2), 0.45, 0.5, 0.86);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(W() / 2, H() / 2), 0.32, 0.45, 0.93);
   if (!low) composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
@@ -710,7 +703,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   /* ---------- zones: walk around the garage ---------- */
   const ZONE_AT: Record<ZoneId, THREE.Vector3> = {
     car: CAR, bench: new THREE.Vector3(-3.3, 1.2, -3.6), wall: new THREE.Vector3(0.6, 1.9, -4.2),
-    shelf: new THREE.Vector3(5.7, 1.4, -2.3), board: new THREE.Vector3(-6.3, 1.9, 0.9),
+    shelf: new THREE.Vector3(2.5, 0.8, -2.0), board: new THREE.Vector3(-6.3, 1.9, 0.9),
   };
   function goZone(z: ZoneId) {
     focused = null;
@@ -719,7 +712,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     look.base = y; flyTo(lookPose(), 1.1);
   }
   // arrow keys step between the things worth looking at, never at a blank wall
-  const VIEWS = [CAR, new THREE.Vector3(2.45, 2.6, -4.2), new THREE.Vector3(5.7, 1.4, -2.3), new THREE.Vector3(0.6, 2.0, 7.4), new THREE.Vector3(-6.3, 1.9, 0.95), new THREE.Vector3(-3.3, 1.2, -3.6)];
+  const VIEWS = [CAR, new THREE.Vector3(2.45, 2.6, -4.2), new THREE.Vector3(2.5, 0.8, -2.0), new THREE.Vector3(0.6, 2.0, 7.4), new THREE.Vector3(-6.3, 1.9, 0.95), new THREE.Vector3(-3.3, 1.2, -3.6)];
   function turn(dir: number) {
     focused = null; const e = EYE();
     const ys = VIEWS.map((v) => { let y = yawTo(e, v); while (y - look.base > Math.PI) y -= Math.PI * 2; while (y - look.base < -Math.PI) y += Math.PI * 2; return y; });
@@ -753,7 +746,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   function startIntro() { introStart = clock.getElapsedTime(); }
   /** "full": everything bright and easy to read; "normal": the moody workshop look */
   const LIGHTS = {
-    full: { lamp: 52, hemi: 1.05, fill: 12, shelf: 8, rim: 1, tube: 22, spot: 18, env: 0.6, exp: 1.25 },
+    full: { lamp: 44, hemi: 0.9, fill: 9, shelf: 7, rim: 0.9, tube: 15, spot: 14, env: 0.5, exp: 1.1 },
     normal: { lamp: 46, hemi: 0.5, fill: 8, shelf: 6, rim: 0.7, tube: 9, spot: 16, env: 0.32, exp: 1.1 },
   };
   let mode: keyof typeof LIGHTS = "full", level = 0;

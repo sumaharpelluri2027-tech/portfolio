@@ -9,13 +9,13 @@ import * as voice from "../narrate";
  * Swap `img` for real photos (VIT, work) as they come in; drop a recording at assets/voice/story-<n>.mp3 and list it in narrate.RECORDED.
  */
 export const CHAPTERS: { tag: string; title: string; line: string; img: string; logo?: string; stat?: [string, string] }[] = [
-  { tag: "HELLO", title: "I'm Sumahar.", line: "Hi, I'm Sumahar. I make businesses run better: cleaner data, fewer manual steps, and decisions backed by numbers.", img: "me/cover.webp" },
-  { tag: "VIT · → 2022", title: "The engineer", line: "I trained as a mechanical engineer at VIT, and designed the brakes on our BAJA buggy. We finished eighth in India. That buggy is the one in this garage.", img: "me/studio-smile.webp", logo: "vit", stat: ["AIR 8", "BAJA SAE India"] },
-  { tag: "MYNTRA · 2022", title: "The analyst", line: "In my final semester I interned at Myntra as a data analyst. My funnel analysis informed a budget call at the CEO's level.", img: "me/desk-night.webp", logo: "myntra", stat: ["CEO-level", "budget call"] },
-  { tag: "WIPRO · 2022–24", title: "The client side", line: "At Wipro I rebuilt CRM reporting for more than a hundred business accounts.", img: "me/desk-night.webp", logo: "wipro", stat: ["+40%", "pipeline visibility"] },
-  { tag: "RABBIT INVEST · 2024–26", title: "The operator", line: "Then I joined Rabbit Invest as roughly its second hire. I built operations from zero, took data accuracy from fifty to ninety-five percent, automated eighty percent of the manual work, and was promoted to Lead.", img: "me/clean.webp", logo: "rabbit-invest", stat: ["50→95%", "data accuracy"] },
-  { tag: "MASTERS' UNION · NOW", title: "The builder", line: "Now I'm at Masters' Union: shipping AI products, selling with a D2C brand, and leading the AI and Analytics Wing.", img: "img/aiaw-team.webp", logo: "masters-union", stat: ["2", "live AI products"] },
-  { tag: "YOUR TURN", title: "Look around, or drive.", line: "This garage is my career. Walk through my work, education, achievements and co-curriculars, or take the buggy out and drive through what I do.", img: "me/cover.webp" },
+  { tag: "HELLO", title: "I'm Sumahar.", line: "Hi, I'm Sumahar. I make businesses run better.", img: "me/cover.webp" },
+  { tag: "VIT · → 2022", title: "The engineer", line: "Mechanical engineer from VIT. Our BAJA buggy ranked eighth in India.", img: "me/studio-smile.webp", logo: "vit", stat: ["AIR 8", "BAJA SAE India"] },
+  { tag: "MYNTRA · 2022", title: "The analyst", line: "Then Myntra. My funnel analysis reached a CEO-level budget call.", img: "me/desk-night.webp", logo: "myntra", stat: ["CEO-level", "budget call"] },
+  { tag: "WIPRO · 2022–24", title: "The client side", line: "At Wipro, I rebuilt CRM reporting for over a hundred accounts.", img: "me/desk-night.webp", logo: "wipro", stat: ["+40%", "pipeline visibility"] },
+  { tag: "RABBIT INVEST · 2024–26", title: "The operator", line: "At Rabbit Invest, I built ops from zero. Data accuracy went from fifty to ninety-five percent.", img: "me/clean.webp", logo: "rabbit-invest", stat: ["50→95%", "data accuracy"] },
+  { tag: "MASTERS' UNION · NOW", title: "The builder", line: "Now at Masters' Union: shipping AI products, and leading the AI Wing.", img: "img/aiaw-team.webp", logo: "masters-union", stat: ["2", "live AI products"] },
+  { tag: "YOUR TURN", title: "Look around, or drive.", line: "This garage is my career. Look around, or take it for a drive.", img: "me/cover.webp" },
 ];
 
 export default function Story({ onDone }: { onDone: () => void }) {

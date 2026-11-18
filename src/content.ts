@@ -205,13 +205,8 @@ export const PROPS: PropInfo[] = [
   { id: "decco", label: "Decco Store board", hint: "₹3L in 30 days, sold by hand" },
   { id: "toolchest", label: "Tool chest", hint: "What I actually work with" },
   { id: "trophies", label: "Trophy shelf", hint: "Milestones" },
-  { id: "shipped", label: "Shipped crate", hint: "Live products you can open" },
-  { id: "prototypes", label: "Prototype box", hint: "Builds still in progress" },
   { id: "laptop", label: "Laptop", hint: "Ask Sumahar AI" },
-  { id: "radio", label: "Radio", hint: "Play my track" },
-  { id: "clipboard", label: "Clipboard", hint: "The spec sheet · plain résumé view" },
   { id: "powerbox", label: "Power box", hint: "Lift the bonnet: see the data wiring" },
-  { id: "scanner", label: "Diagnostic scanner", hint: "Run a diagnostic on your company" },
   { id: "journey", label: "Road map", hint: "My career journey, stop by stop" },
   { id: "exit", label: "Garage door", hint: "Out to the test track: drive the buggy" },
 ];

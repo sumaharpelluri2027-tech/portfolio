@@ -37,6 +37,8 @@ export interface GarageAPI {
   focus(id: StationId | null): void;
   /** turn the view by a quarter (±1) */
   turn(dir: number): void;
+  /** stop drawing while a full-screen panel covers the scene */
+  setHidden(on: boolean): void;
   goZone(z: ZoneId): void;
   setXray(on: boolean): void;
   bindLabel(id: string, el: HTMLElement | null): void;
@@ -84,7 +86,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, low ? 1.25 : 1.75));
   renderer.setSize(W(), H());
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.22;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
@@ -98,10 +100,10 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   const camera = new THREE.PerspectiveCamera(46, W() / H(), 0.05, 80);
   const narrow = () => W() / H() < 0.85;
   /* You stand in the middle of the garage and look around: hover to glance, push to the edge or drag to turn all the way round. */
-  const EYE = () => (narrow() ? new THREE.Vector3(0.5, 1.8, 5.2) : new THREE.Vector3(0.6, 1.78, 3.7));
+  const EYE = () => (narrow() ? new THREE.Vector3(0.5, 1.8, 5.2) : new THREE.Vector3(0.7, 1.86, 4.5));
   const CAR = new THREE.Vector3(-0.3, 0.85, -0.7);
   const yawTo = (eye: THREE.Vector3, t: THREE.Vector3) => Math.atan2(-(t.x - eye.x), -(t.z - eye.z));
-  const look = { base: 0, yaw: 0, pitch: -0.14, hoverYaw: 0, hoverPitch: 0, fov: 46 };
+  const look = { base: 0, yaw: 0, pitch: -0.06, hoverYaw: 0, hoverPitch: 0, fov: 46 };
   look.base = look.yaw = yawTo(EYE(), CAR);
   const dirOf = (yaw: number, pitch: number) => new THREE.Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
   const lookPose = () => { const e = EYE(); return { pos: e, target: e.clone().add(dirOf(look.base, look.pitch).multiplyScalar(4)) }; };
@@ -111,6 +113,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   camera.lookAt(target);
 
   /* ---------- lights ---------- */
+  const tubes = [[-3.6, -2.6], [3.8, -2.4], [-2.2, 2.2], [2.6, 3.4]].map(([x, z]) => { const l = new THREE.PointLight(0xf2f6ff, 0, 11, 1.4); l.position.set(x, 4.8, z); scene.add(l); return l; });
   const hemi = new THREE.HemisphereLight(0x8fa6c0, 0x1a140e, 0.0);
   scene.add(hemi);
   const lamp = new THREE.SpotLight(0xffc98a, 0, 14, 0.62, 0.55, 1.4);
@@ -358,11 +361,11 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     const mapG = new THREE.Group();
     const mapFrame = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.75, 0.05), new THREE.MeshStandardMaterial({ color: 0x2b2017, roughness: 0.7 }));
     const mapFace = new THREE.Mesh(new THREE.PlaneGeometry(2.88, 1.62), new THREE.MeshStandardMaterial({ map: mapTex, roughness: 0.75, emissive: 0xffffff, emissiveMap: mapTex, emissiveIntensity: 0.12 })); mapFace.position.z = 0.03;
-    mapG.add(mapFrame, mapFace); mapG.rotation.y = Math.PI; mapG.position.set(-4.0, 2.05, DOOR.z - 0.04); props.add(mapG);
-    const mapLight = new THREE.SpotLight(0xfff1d6, 7, 6, 0.6, 0.6, 1.5); mapLight.position.set(-4.0, 4.2, DOOR.z - 1.6); mapLight.target = mapG; scene.add(mapLight);
-    addStation("journey", mapG, { pos: [-4.0, 2.0, DOOR.z - 3.3], target: [-4.0, 2.0, DOOR.z + 2] });
+    mapG.add(mapFrame, mapFace); mapG.scale.setScalar(0.98); mapG.position.set(2.45, 3.3, -4.24); props.add(mapG);
+    const mapLight = new THREE.SpotLight(0xfff1d6, 7, 6, 0.6, 0.6, 1.5); mapLight.position.set(2.45, 4.9, -2.6); mapLight.target = mapG; scene.add(mapLight);
+    addStation("journey", mapG, { pos: [2.45, 3.0, -0.8], target: [2.45, 3.3, -4.3] });
     addStation("exit", exitG, { pos: [DOOR.x, 1.8, DOOR.z - 3.2], target: [DOOR.x, 2.0, DOOR.z + 6] });
-    const names = ["metal_tool_chest", "boombox", "hanging_industrial_lamp", "steel_frame_shelves_01", "classic_laptop", "clipboard", "old_tyre", "metal_jerrycan", "oil_tin", "metal_stool_01", "ratchet_wrench", "adjustable_wrench", "cardboard_box_01", "korean_fire_extinguisher_01", "power_box_01", "industrial_storage_cart", "mounted_fluorescent_lights"];
+    const names = ["metal_tool_chest", "hanging_industrial_lamp", "steel_frame_shelves_01", "classic_laptop", "old_tyre", "metal_jerrycan", "oil_tin", "metal_stool_01", "ratchet_wrench", "adjustable_wrench", "korean_fire_extinguisher_01", "power_box_01", "industrial_storage_cart", "mounted_fluorescent_lights"];
     const M: Record<string, THREE.Group> = {};
     await Promise.all(names.map(async (n) => { M[n] = await load(n); }));
 
@@ -381,16 +384,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     const laptop = M.classic_laptop; laptop.rotation.y = 0.35; props.add(laptop);
     const lt = benchTop(-3.85, -3.45, 1.0); dropOnto(laptop, bench, lt.x, lt.z, lt.fallback);
     addStation("laptop", laptop, { pos: [-2.6, 1.9, -1.6], target: [-3.7, 1.1, -3.5] });
-    const radio = M.boombox; radio.rotation.y = -0.25; fitHeight(radio, 0.36); props.add(radio);
-    dropOnto(radio, bench, -3.05, -3.6, 1.0);
-    addStation("radio", radio, { pos: [-2.4, 1.8, -1.8], target: [-3.1, 1.1, -3.6] });
     for (const [x, z] of [[-4.15, -3.75], [-4.0, -3.78]]) { const tin = M.oil_tin.clone(); props.add(tin); dropOnto(tin, bench, x, z, 1.0); }
-
-    // clipboard hung on the wall by the bench
-    const clip = M.clipboard; fitHeight(clip, 0.06); clip.scale.multiplyScalar(1.6);
-    clip.rotation.x = Math.PI / 2; clip.position.set(-2.62, 1.72, -4.22); props.add(clip);
-    const nail = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.06, 8), steel); nail.rotation.x = Math.PI / 2; nail.position.set(-2.62, 2.0, -4.22); props.add(nail);
-    addStation("clipboard", clip, { pos: [-2.1, 1.7, -2.5], target: [-2.62, 1.6, -4.2] });
 
     // power box on the wall (the X-ray switch)
     const pbox = M.power_box_01; pbox.rotation.y = 0; pbox.position.set(-0.9, 1.55, -4.08); props.add(pbox);
@@ -532,36 +526,6 @@ export function createGarage(opt: GarageOptions): GarageAPI {
     const chestG = new THREE.Group(); props.add(chestG); chestG.add(chest, chestPlate);
     addStation("toolchest", chestG, { pos: [-3.6, 1.6, 0.4], target: [-5.8, 0.7, -1.3] });
 
-    // crates: shipped (stack of 3) and prototypes
-    const shippedG = new THREE.Group(); props.add(shippedG);
-    const boxB = new THREE.Box3().setFromObject(M.cardboard_box_01); const bh = boxB.max.y - boxB.min.y;
-    [[0, 0, 0.05], [0.04, 1, -0.12], [-0.02, 2, 0.2]].forEach(([dx, lvl, rot]) => {
-      const b = M.cardboard_box_01.clone(); b.scale.multiplyScalar(1.5); b.rotation.y = rot; b.position.set(5.2 + dx, lvl * bh * 1.5, -0.6); shippedG.add(b); sitOnFloor(b, lvl * bh * 1.5);
-    });
-    const shipPlate = labelPlate("SHIPPED · 6", 0.5, 0.13); shipPlate.rotation.y = -Math.PI / 2 + 0.35; shipPlate.position.set(4.82, bh * 1.5 * 2.4, -0.45); shippedG.add(shipPlate);
-    addStation("shipped", shippedG, { pos: [3.1, 1.6, 1.4], target: [5.2, 0.8, -0.6] });
-
-    const protoG = new THREE.Group(); props.add(protoG);
-    for (const [dx, dz, r] of [[0, 0, 0.3], [0.5, 0.25, -0.2]]) { const b = M.cardboard_box_01.clone(); b.scale.multiplyScalar(1.3); b.rotation.y = r; b.position.set(4.6 + dx, 0, 1.0 + dz); protoG.add(b); sitOnFloor(b); }
-    const protoPlate = labelPlate("PROTOTYPES", 0.46, 0.11); protoPlate.rotation.y = -Math.PI / 2 + 0.6; protoPlate.position.set(4.45, 0.55, 1.25); protoG.add(protoPlate);
-    addStation("prototypes", protoG, { pos: [2.8, 1.4, 2.6], target: [4.8, 0.4, 1.1] });
-
-    // diagnostic scanner cart (procedural) at the front-right of the car
-    const scanner = new THREE.Group(); scanner.position.set(2.55, 0, 0.35); scanner.rotation.y = -0.85; props.add(scanner);
-    const cartBody = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.85, 0.45), new THREE.MeshStandardMaterial({ color: 0xc8261b, metalness: 0.5, roughness: 0.4 })); cartBody.position.y = 0.52; scanner.add(cartBody);
-    for (const [x, z] of [[-0.22, -0.17], [0.22, -0.17], [-0.22, 0.17], [0.22, 0.17]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 14), new THREE.MeshStandardMaterial({ color: 0x111111 })); w.rotation.z = Math.PI / 2; w.position.set(x, 0.05, z); scanner.add(w); }
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.36, 0.08), new THREE.MeshStandardMaterial({ color: 0x1b1b1b, metalness: 0.4, roughness: 0.5 })); head.position.set(0, 1.18, 0.02); head.rotation.x = -0.35; scanner.add(head);
-    scanTex = canvasTex(512, 320, (g) => drawScan(g, 0));
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.27), new THREE.MeshStandardMaterial({ map: scanTex, emissive: 0xffffff, emissiveMap: scanTex, emissiveIntensity: 1.1, roughness: 0.3 }));
-    screen.position.set(0, 1.18, 0.065); screen.rotation.x = -0.35; scanner.add(screen);
-    const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.22), new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.9 })); paper.position.set(0.12, 0.98, 0.235); paper.rotation.x = 0.25; scanner.add(paper);
-    const scanPlate = labelPlate("RUN A DIAGNOSTIC", 0.5, 0.08, "#ffffff"); scanPlate.position.set(0, 0.8, 0.228); scanner.add(scanPlate);
-    // cable from scanner to the car
-    const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(2.35, 0.9, 0.35), new THREE.Vector3(2.0, 0.04, 0.4), new THREE.Vector3(1.2, 0.03, 0.3), new THREE.Vector3(0.7, 0.55, 0.25)]), 40, 0.012, 6), new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.7 }));
-    props.add(cable);
-    shadows(scanner);
-    addStation("scanner", scanner, { pos: [4.0, 1.7, 2.0], target: [2.55, 1.0, 0.35] });
-
     // dressing
     for (const [x, y, z, rx, ry] of [[-5.3, 0.3, 2.2, 0, 0.3], [-5.3, 0.3, 2.45, 0, -0.1], [-5.35, 0.66, 2.3, Math.PI / 2, 0]]) { const t = M.old_tyre.clone(); t.position.set(x, y, z); t.rotation.set(rx, ry, 0); props.add(t); }
     const can = M.metal_jerrycan; can.position.set(-2.5, 0, -3.95); can.rotation.y = 0.4; props.add(can); sitOnFloor(can);
@@ -644,7 +608,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   outline.edgeStrength = 4; outline.edgeGlow = 0.6; outline.edgeThickness = 1.6; outline.pulsePeriod = 2.4;
   outline.visibleEdgeColor.set(0xffc21a); outline.hiddenEdgeColor.set(0x6b4d00);
   composer.addPass(outline);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(W(), H()), 0.45, 0.5, 0.86);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(W() / 2, H() / 2), 0.45, 0.5, 0.86);
   if (!low) composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
@@ -767,28 +731,39 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   function startIntro() { introStart = clock.getElapsedTime(); }
   function lightLevel(k: number) {
     lamp.intensity = 46 * k; if (bulbMat) bulbMat.emissiveIntensity = 7 * k;
-    hemi.intensity = 0.32 * k; fill.intensity = 6 * k; shelfFill.intensity = 4.5 * k; rim.intensity = 0.55 * k;
-    (scene as unknown as { environmentIntensity: number }).environmentIntensity = 0.22 * k;
+    hemi.intensity = 0.95 * k; fill.intensity = 12 * k; shelfFill.intensity = 7 * k; rim.intensity = 0.9 * k;
+    tubes.forEach((l) => { l.intensity = 22 * k; });
+    (scene as unknown as { environmentIntensity: number }).environmentIntensity = 0.55 * k;
   }
   lightLevel(0);
 
   /* ---------- loop ---------- */
   const clock = new THREE.Clock();
   let raf = 0, running = true, lastScan = 0;
+  const perf = { n: 0, sum: 0 };
+  let hidden = false; // a full-screen panel covers the garage: skip drawing
 
   function frame() {
     if (!running) return;
-    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+    const rawDt = clock.getDelta();
+    const dt = Math.min(rawDt, 0.05), t = clock.elapsedTime;
+    if (introDone && !QA && perf.n < 120) {
+      perf.n++; perf.sum += rawDt;
+      if (perf.n === 120 && perf.sum / 120 > 1 / 42) {
+        renderer.setPixelRatio(1); composer.setPixelRatio?.(1); bloom.enabled = false; outline.edgeGlow = 0;
+        renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.needsUpdate = true; onResize();
+      }
+    }
 
     // intro: flicker, then dolly in
     if (introStart >= 0 && !introDone) {
       const it = t - introStart;
-      const flick = it < 0.35 ? 0 : it < 0.5 ? 0.7 : it < 0.62 ? 0.05 : it < 0.75 ? 0.9 : it < 0.85 ? 0.2 : Math.min(1, 0.6 + (it - 0.85) * 1.2);
+      const flick = it < 0.5 ? 0.15 : it < 0.6 ? 0.8 : it < 0.68 ? 0.35 : Math.min(1, 0.7 + (it - 0.68) * 1.5);
       lightLevel(flick);
-      const k = ease(Math.min(1, Math.max(0, (it - 0.3) / 2.6)));
+      const k = ease(Math.min(1, Math.max(0, (it - 0.2) / 2.2)));
       const H0 = HOME(); const start = new THREE.Vector3(0.6, 2.3, 11.5);
       camera.position.lerpVectors(start, H0.pos, k); target.copy(H0.target);
-      if (it > 2.95) { introDone = true; lightLevel(1); opt.onReady(); }
+      if (it > 2.45) { introDone = true; lightLevel(1); opt.onReady(); }
     }
 
     // camera tween
@@ -841,8 +816,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
       if (Math.abs(camera.fov - look.fov) > 0.05) { camera.fov += (look.fov - camera.fov) * k; camera.updateProjectionMatrix(); }
     } else if (tween === null && focused) { /* hold */ }
     camera.lookAt(target);
-    composer.render();
-    placeLabels();
+    if (!hidden) { composer.render(); placeLabels(); }
     raf = QA ? (window.setTimeout(frame, 1500) as unknown as number) : requestAnimationFrame(frame);
   }
   frame(); // start drawing immediately; props stream in as they load
@@ -861,7 +835,7 @@ export function createGarage(opt: GarageOptions): GarageAPI {
   void loaded; void total;
 
   return {
-    focus, setXray, bindLabel, startIntro, goZone, turn,
+    focus, setXray, bindLabel, startIntro, goZone, turn, setHidden: (on: boolean) => { hidden = on; },
     dispose() {
       running = false; cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", onVis);

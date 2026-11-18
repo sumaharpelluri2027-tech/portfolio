@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Flag, LayoutGrid, MessageCircle, RotateCcw, X } from "lucide-react";
-import { A } from "../data";
+import { ChevronLeft, ChevronRight, Download, FileText, Flag, LayoutGrid, MessageCircle, Play, RotateCcw, Route, X } from "lucide-react";
+import { A, JOURNEY } from "../data";
 import type { StationId } from "../content";
 import type { ZoneId } from "../scene/garage";
 
@@ -83,7 +83,8 @@ export function HelpMenu({ open, setOpen, onTour, onProjects, onDrive, onAsk, on
             <button type="button" onClick={onTour} className={item}><RotateCcw size={15} className="text-hazard" /><span className="text-[14.5px]">Give me the tour</span></button>
             <button type="button" onClick={onProjects} className={item}><LayoutGrid size={15} className="text-hazard" /><span className="text-[14.5px]">Show me your projects</span></button>
             <button type="button" onClick={onAsk} className={item}><MessageCircle size={15} className="text-hazard" /><span className="text-[14.5px]">Let me ask you something</span></button>
-            <button type="button" onClick={onList} className={item}><span className="w-[15px] text-center text-hazard">≡</span><span className="text-[14.5px]">List everything in the garage</span></button>
+            <button type="button" onClick={onList} className={item}><Route size={15} className="text-hazard" /><span className="text-[14.5px]">My career journey</span></button>
+            <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className={item}><FileText size={15} className="text-hazard" /><span className="text-[14.5px]">Download my CV</span></a>
             <button type="button" onClick={onDrive} className={item}><Flag size={15} className="text-hazard" /><span className="text-[14.5px]">Take the buggy for a lap</span></button>
           </motion.div>
         )}
@@ -93,5 +94,51 @@ export function HelpMenu({ open, setOpen, onTour, onProjects, onDrive, onAsk, on
         <span className="font-mono text-[11px] tracking-wider">NEED A HAND?</span>
       </button>
     </div>
+  );
+}
+
+/** The first thing a visitor sees once the shutter is up: who I am, my road so far, and four clear ways in. */
+export function QuickView({ onTour, onProjects, onJourney, onDrive, onClose }: { onTour: () => void; onProjects: () => void; onJourney: () => void; onDrive: () => void; onClose: () => void }) {
+  const big = "flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors";
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-auto absolute inset-0 z-[35] grid place-items-center overflow-y-auto bg-black/35 p-4">
+      <motion.div role="dialog" aria-label="Quick view: who I am" initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }} transition={{ duration: 0.45, delay: 0.15 }}
+        className="relative w-full max-w-[640px] rounded-2xl border border-hazard/50 bg-oil/95 p-5 shadow-[0_30px_90px_rgba(0,0,0,.6)] backdrop-blur md:p-6">
+        <button type="button" onClick={onClose} aria-label="Close and look around" className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full text-paper/60 hover:bg-white/10 hover:text-paper"><X size={16} /></button>
+        <div className="flex items-center gap-4">
+          <img src={A("me/avatar.webp")} alt="Sumahar Pelluri" className="h-[72px] w-[72px] shrink-0 rounded-full object-cover ring-2 ring-hazard" />
+          <div className="min-w-0">
+            <div className="font-cond text-[26px] font-semibold leading-tight">Hi, I'm Sumahar 👋</div>
+            <p className="text-[14.5px] leading-snug text-paper/75">Mechanical engineer turned operator. I fix data at the source, automate the repeat work and ship AI products. Looking for Founder's Office, data or strategy &amp; ops roles.</p>
+          </div>
+        </div>
+        {/* the road so far, at a glance */}
+        <button type="button" onClick={onJourney} className="group mt-4 block w-full rounded-xl border border-white/10 bg-black/25 p-3 text-left hover:border-hazard/60">
+          <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.2em] text-hazard"><span>MY CAREER JOURNEY</span><span className="text-paper/50 group-hover:text-hazard">OPEN →</span></div>
+          <ol className="relative mt-2.5 grid grid-cols-5 gap-1">
+            <span className="absolute left-[10%] right-[10%] top-[17px] h-[3px] bg-[repeating-linear-gradient(90deg,#f2b705_0_8px,transparent_8px_14px)]" aria-hidden="true" />
+            {JOURNEY.map((s, i) => (
+              <li key={s.where} className="relative flex flex-col items-center text-center">
+                <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full bg-white p-1 ${i === JOURNEY.length - 1 ? "ring-2 ring-hazard" : ""}`}>{s.logo && <img src={A(`logos/${s.logo}.png`)} alt="" className="max-h-6 w-auto" />}</span>
+                <span className="mt-1.5 font-cond text-[13px] font-semibold leading-tight">{s.where.replace(", Vellore", "")}</span>
+                <span className="font-mono text-[9.5px] leading-tight text-paper/55">{s.when.replace("Now · class of ", "Now · '").replace("Jan – Jun ", "").replace(/Jan |Jul /g, "")}</span>
+              </li>
+            ))}
+          </ol>
+        </button>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          {([["50→95%", "data accuracy"], ["80%", "manual ops automated"], ["5×", "sales conversion"]] as const).map(([b, l]) => (
+            <div key={l} className="rounded-lg bg-white/[.04] px-2 py-2"><div className="font-stencil text-[22px] leading-none text-hazard">{b}</div><div className="mt-1 text-[11.5px] leading-tight text-paper/60">{l}</div></div>
+          ))}
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <button type="button" onClick={onTour} className={`${big} border-transparent bg-hazard text-ink hover:brightness-110`}><Play size={18} /><span><span className="block font-mono text-[12px] font-bold tracking-wider">60-SECOND TOUR</span><span className="block text-[12px] opacity-75">I'll walk you through it</span></span></button>
+          <button type="button" onClick={onProjects} className={`${big} border-white/20 hover:border-hazard`}><LayoutGrid size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">MY PROJECTS</span><span className="block text-[12px] text-paper/60">The big five, then the rest</span></span></button>
+          <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className={`${big} border-white/20 hover:border-hazard`}><Download size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">DOWNLOAD CV</span><span className="block text-[12px] text-paper/60">One page, PDF</span></span></a>
+          <button type="button" onClick={onDrive} className={`${big} border-white/20 hover:border-hazard`}><Flag size={18} className="text-hazard" /><span><span className="block font-mono text-[12px] font-bold tracking-wider">TEST-DRIVE ME</span><span className="block text-[12px] text-paper/60">A 2-minute drive, for fun</span></span></button>
+        </div>
+        <button type="button" onClick={onClose} className="mx-auto mt-3 block font-mono text-[11px] tracking-wider text-paper/55 underline decoration-white/25 underline-offset-4 hover:text-paper">I'LL LOOK AROUND THE GARAGE MYSELF</button>
+      </motion.div>
+    </motion.div>
   );
 }

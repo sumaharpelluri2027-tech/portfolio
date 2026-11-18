@@ -14,6 +14,7 @@ export default function Specs() {
       <div className="mx-auto max-w-[920px] px-5 pb-20 pt-8 md:px-10">
         <div className="flex items-center justify-between font-mono text-xs">
           <a href="#/" className="inline-flex items-center gap-1 rounded-full bg-black px-4 py-2 text-hazard print:hidden"><ArrowLeft size={14} /> <span className="sm:hidden">GARAGE</span><span className="hidden sm:inline">BACK TO THE GARAGE</span></a>
+          <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className="inline-flex items-center gap-1 rounded-full border-2 border-black px-4 py-2 text-black print:hidden">DOWNLOAD CV (PDF)</a>
           <span className="text-black/50">SPEC SHEET · REV 2026.11</span>
         </div>
 

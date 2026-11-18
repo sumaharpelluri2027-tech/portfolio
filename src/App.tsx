@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { FileText, Route, Flag, LayoutGrid, MessageCircle, Music2, Pause, X, Zap } from "lucide-react";
-import { GuideCard, Greeting, HelpMenu, TOUR } from "./ui/Guide";
+import { ChevronUp, Download, FileText, Route, Flag, LayoutGrid, MessageCircle, Music2, Pause, X } from "lucide-react";
+import { GuideCard, HelpMenu, QuickView, TOUR } from "./ui/Guide";
 import { createGarage, type GarageAPI } from "./scene/garage";
 import { createBuggy } from "./scene/buggyEntry";
 import { A, EMAIL } from "./data";
@@ -15,6 +15,18 @@ import Journey from "./ui/Journey";
 const Specs = lazy(() => import("./ui/Specs"));
 import Achievement from "./ui/Achievement";
 const Drive = lazy(() => import("./ui/Drive"));
+
+/** The shutter going up: a short metallic rattle made on the fly. */
+function rattle() {
+  try {
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const c = new AC(); const len = 1.5; const buf = c.createBuffer(1, c.sampleRate * len, c.sampleRate); const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) { const t = i / c.sampleRate; const click = Math.sin(t * 2 * Math.PI * 28) > 0.6 ? 1 : 0.25; d[i] = (Math.random() * 2 - 1) * click * Math.min(1, t * 8) * Math.max(0, 1 - t / len); }
+    const src = c.createBufferSource(); src.buffer = buf; const f = c.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1400; f.Q.value = 0.8;
+    const g = c.createGain(); g.gain.value = 0.35; src.connect(f); f.connect(g); g.connect(c.destination); src.start();
+    window.setTimeout(() => c.close().catch(() => {}), 2000);
+  } catch { /* sound is optional */ }
+}
 
 const isPart = (id: StationId | null): id is CarPart => !!id && id in JOBS;
 const Tick = ({ on }: { on: boolean }) => <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[11px] ${on ? "border-hazard bg-hazard text-ink" : "border-white/25 text-transparent"}`}>✓</span>;
@@ -121,6 +133,7 @@ function Garage() {
     if (m && (m[1] in JOBS || PROPS.some((p) => p.id === m[1]))) select(m[1] as StationId);
   }, [phase, select]);
 
+  const openShutter = () => { rattle(); switchOn(); };
   const switchOn = () => { setPhase("intro"); api.current?.startIntro(); try { sessionStorage.setItem("sp-lights", "1"); } catch { /* ignore */ } };
   useEffect(() => { if (phase === "gate") { let on = false; try { on = sessionStorage.getItem("sp-lights") === "1"; } catch { /* ignore */ } if (on) switchOn(); } }, [phase]); // returning visitors skip the gate
   const live = phase === "live";
@@ -137,6 +150,8 @@ function Garage() {
     const st = TOUR[k]; setStep(k); setOpen(null); setXray(false);
     if (st.target) api.current?.focus(st.target); else api.current?.focus(null);
   }, []);
+  useEffect(() => { api.current?.setHidden(!!board); }, [board]);
+  const dismissGreet = () => { setGuide("help"); try { localStorage.setItem("sp-toured", "1"); } catch { /* ignore */ } };
   const startTour = () => { setHelpOpen(false); setBoard(null); setGuide("tour"); tourGo(0); };
   const endTour = () => { setGuide("help"); api.current?.focus(null); try { localStorage.setItem("sp-toured", "1"); } catch { /* ignore */ } };
   const tourTarget = guide === "tour" ? TOUR[step].target : null;
@@ -210,7 +225,8 @@ function Garage() {
           <span className="leading-tight"><span className="block font-stencil text-[17px] tracking-wide sm:text-[19px]">SUMAHAR PELLURI</span><span className="hidden font-mono text-[10.5px] tracking-[0.18em] text-paper/60 sm:block">FOUNDER'S OFFICE · OPERATIONS · DATA</span></span>
         </a>
         <button type="button" onClick={() => { setOpen(null); setBoard("all"); }} className="flex items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider backdrop-blur hover:border-hazard"><LayoutGrid size={14} /><span className="hidden sm:inline">PROJECTS</span></button>
-        <button type="button" onClick={() => select("journey")} className="hidden items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard lg:flex"><Route size={14} />JOURNEY</button>
+        <button type="button" onClick={() => select("journey")} className="hidden items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard md:flex"><Route size={14} />JOURNEY</button>
+        <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className="flex items-center gap-2 rounded-full border border-hazard/70 bg-hazard/15 px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider text-hazard backdrop-blur hover:bg-hazard hover:text-ink"><Download size={14} /><span className="hidden sm:inline">CV</span></a>
         <button type="button" onClick={() => select("laptop")} aria-label="Ask Sumahar AI" className="flex items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard"><MessageCircle size={14} /><span className="hidden md:inline">ASK ME</span></button>
         <button type="button" onClick={toggleRadio} aria-label={playing ? "Turn the radio off" : "Turn the radio on"} className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-ink/60 backdrop-blur hover:border-hazard">{playing ? <Pause size={15} /> : <Music2 size={15} />}</button>
         <a href="#/specs" aria-label="Spec sheet" className="hidden items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard sm:flex"><FileText size={14} /><span className="hidden lg:inline">SPEC SHEET</span></a>
@@ -218,7 +234,7 @@ function Garage() {
 
       {/* the big call: take it for a drive */}
       <AnimatePresence>
-        {live && !open && !xray && !board && (
+        {live && !open && !xray && !board && guide === "help" && (
           <motion.button type="button" onClick={goDrive} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: 0.5 }}
             className="group absolute left-1/2 top-[78px] z-20 -translate-x-1/2 overflow-hidden rounded-xl p-[2px] shadow-[0_0_50px_rgba(242,183,5,.35)] md:bottom-7 md:top-auto">
             <span className="hazard absolute inset-0 animate-[spin_6s_linear_infinite] opacity-90 [background-size:200%_200%]" aria-hidden="true" />
@@ -233,15 +249,26 @@ function Garage() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {live && guide === "greet" && !open && !board && !xray && (
+          <QuickView key="qv" onTour={startTour} onProjects={() => { dismissGreet(); setBoard("all"); }} onJourney={() => { dismissGreet(); select("journey"); }} onDrive={() => { dismissGreet(); goDrive(); }} onClose={dismissGreet} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence mode="wait">
+        {live && guide === "tour" && !open && !board && (
+          <div key="tourwrap" className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-4 md:pb-7" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
+            <GuideCard key={"t" + step} step={TOUR[step]} i={step} n={TOUR.length} onNext={() => tourGo(step + 1)} onBack={() => tourGo(step - 1)} onClose={endTour}
+              onOpen={() => { const t = TOUR[step].target; if (t) { endTour(); select(t); } }} onDrive={() => { endTour(); goDrive(); }} />
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* bottom: guide (left) · zones (centre) · explore (right) */}
       {live && !open && !board && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 p-4 md:flex-row md:items-end md:justify-between md:p-6" style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
           <div className="order-2 md:order-1">
             <AnimatePresence mode="wait">
-              {guide === "greet" && !xray && <Greeting key="g" onTour={startTour} onExplore={() => { setGuide("help"); try { localStorage.setItem("sp-toured", "1"); } catch { /* ignore */ } }} />}
-              {guide === "tour" && <GuideCard key={"t" + step} step={TOUR[step]} i={step} n={TOUR.length} onNext={() => tourGo(step + 1)} onBack={() => tourGo(step - 1)} onClose={endTour}
-                onOpen={() => { const t = TOUR[step].target; if (t) { endTour(); select(t); } }} onDrive={() => { endTour(); goDrive(); }} />}
-              {guide === "help" && <motion.div key="h" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><HelpMenu open={helpOpen} setOpen={setHelpOpen} onTour={startTour} onProjects={() => { setHelpOpen(false); setBoard("all"); }} onAsk={() => { setHelpOpen(false); select("laptop"); }} onDrive={goDrive} onList={() => { setHelpOpen(false); setList(true); }} /></motion.div>}
+              {guide === "help" && <motion.div key="h" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><HelpMenu open={helpOpen} setOpen={setHelpOpen} onTour={startTour} onProjects={() => { setHelpOpen(false); setBoard("all"); }} onAsk={() => { setHelpOpen(false); select("laptop"); }} onDrive={goDrive} onList={() => { setHelpOpen(false); select("journey"); }} /></motion.div>}
             </AnimatePresence>
           </div>
           <div className="order-1 flex-1 md:order-2" />
@@ -296,34 +323,36 @@ function Garage() {
       {/* toast */}
       <AnimatePresence>{toast && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute left-1/2 top-[84px] z-40 -translate-x-1/2 rounded-full bg-paper px-4 py-2 font-mono text-[11px] text-ink">{toast}</motion.div>}</AnimatePresence>
 
-      {/* gate: switch on the lights */}
+      {/* gate: a roller shutter. Open it and the lights come on. */}
       <AnimatePresence>
         {(phase === "loading" || phase === "gate") && (
-          <motion.div exit={{ opacity: 0 }} transition={{ duration: 0.8 }} className="absolute inset-0 z-50 grid place-items-start overflow-hidden bg-ink px-6 pt-[12vh] text-center md:px-[7vw] md:pt-0 md:text-left">
-            <motion.img src={A("me/cover.webp")} alt="Sumahar Pelluri, smiling, in a dark suit" initial={{ opacity: 0, scale: 1.08 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 2.2, ease: [0.2, 0.8, 0.2, 1] }}
-              className="pointer-events-none absolute bottom-0 right-0 h-[46%] w-full object-cover object-top opacity-90 md:h-full md:w-[52%] md:opacity-95 [mask-image:linear-gradient(to_bottom,transparent,black_30%)] md:[mask-image:linear-gradient(to_right,transparent,black_35%)]" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_70%_40%,transparent,rgba(12,11,10,.55)_70%)]" />
-            <div className="relative w-full md:mt-[18vh] md:max-w-[620px]">
-              <div className="font-mono text-[11px] tracking-[0.3em] text-paper/50">BAY 08 · AFTER HOURS</div>
-              <h1 className="mt-3 font-stencil text-[clamp(44px,9vw,104px)] leading-[0.9]">SUMAHAR'S<br /><span className="text-hazard">GARAGE</span></h1>
-              <p className="mx-auto mt-4 max-w-[46ch] text-paper/70 md:mx-0">A car on a lift. Every part is something I built for a business, and every part is wired with data.</p>
-              <div className="mt-9 flex flex-col items-center gap-4 md:items-start">
+          <motion.div key="shutter" exit={{ y: "-104%" }} transition={{ duration: 1.5, ease: [0.55, 0.05, 0.3, 1] }}
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center overflow-hidden px-6 text-center"
+            style={{ background: "repeating-linear-gradient(180deg,#8e949b 0 3px,#b9bec4 3px 22px,#6f757c 22px 26px,#a3a9af 26px 44px)", boxShadow: "inset 0 -40px 60px rgba(0,0,0,.45)" }}>
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(255,255,255,.18),rgba(0,0,0,.35)_75%)]" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[10px] bg-[#2b2724]" />
+            <div className="relative">
+              <div className="font-mono text-[11px] font-bold tracking-[0.35em] text-[#2b2724]/80">BAY 08 · SUMAHAR PELLURI</div>
+              <h1 className="mt-2 font-stencil text-[clamp(48px,10vw,120px)] leading-[0.88] text-[#1b1714] [text-shadow:0_2px_0_rgba(255,255,255,.35)]">SUMAHAR'S<br /><span className="text-[#c8261b]">GARAGE</span></h1>
+              <p className="mx-auto mt-3 max-w-[44ch] text-[15px] font-medium text-[#2b2724]">Founder's Office · Strategy &amp; Ops · Data. Every part of the car inside is something I built for a business.</p>
+              <div className="mt-8 flex flex-col items-center gap-4">
                 {phase === "loading" ? (
-                  <div className="w-64"><div className="h-1.5 overflow-hidden rounded bg-white/10"><div className="h-full bg-hazard transition-[width] duration-300" style={{ width: `${Math.round(progress * 100)}%` }} /></div><div className="mt-2 font-mono text-[11px] text-paper/50">OPENING THE SHUTTER · {Math.round(progress * 100)}%</div></div>
+                  <div className="w-64"><div className="h-2 overflow-hidden rounded bg-black/25"><div className="h-full bg-[#1b1714] transition-[width] duration-300" style={{ width: `${Math.round(progress * 100)}%` }} /></div><div className="mt-2 font-mono text-[11px] font-bold text-[#2b2724]">GETTING THE GARAGE READY · {Math.round(progress * 100)}%</div></div>
                 ) : (
-                  <motion.button type="button" onClick={switchOn} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                    className="group flex items-center gap-3 rounded-lg border-2 border-hazard bg-hazard/10 px-7 py-4 font-stencil text-2xl text-hazard shadow-[0_0_40px_rgba(242,183,5,.25)]">
-                    <Zap className="transition-transform group-hover:rotate-12" /> SWITCH ON<span className="hidden sm:inline"> THE LIGHTS</span>
+                  <motion.button type="button" onClick={openShutter} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                    className="flex items-center gap-3 rounded-xl border-4 border-[#1b1714] bg-hazard px-8 py-4 font-stencil text-[26px] text-ink shadow-[0_8px_0_#1b1714]">
+                    <ChevronUp size={28} strokeWidth={3} /> OPEN THE GARAGE
                   </motion.button>
                 )}
-                <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 md:justify-start font-mono text-[11px] tracking-[0.18em] text-paper/55">
-                  <button type="button" onClick={() => { switchOn(); setBoard("all"); }} className="underline decoration-white/30 underline-offset-4 hover:text-paper">SKIP TO THE PROJECTS</button>
-                  <a href="#/drive" onClick={() => { try { sessionStorage.setItem("sp-lights", "1"); } catch { /* ignore */ } }} className="underline decoration-white/30 underline-offset-4 hover:text-paper">GO STRAIGHT TO THE TRACK</a>
-                  <a href="#/specs" className="underline decoration-white/30 underline-offset-4 hover:text-paper">READ THE SPEC SHEET</a>
+                <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 font-mono text-[11px] font-bold tracking-[0.16em] text-[#2b2724]/80">
+                  <button type="button" onClick={() => { openShutter(); setBoard("all"); }} className="underline decoration-black/30 underline-offset-4 hover:text-black">SKIP TO THE PROJECTS</button>
+                  <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className="underline decoration-black/30 underline-offset-4 hover:text-black">DOWNLOAD MY CV</a>
+                  <a href="#/specs" className="underline decoration-black/30 underline-offset-4 hover:text-black">READ THE SPEC SHEET</a>
                 </div>
               </div>
             </div>
-            <div className="absolute bottom-6 left-0 right-0 font-mono text-[10px] tracking-[0.2em] text-paper/35">{EMAIL.toUpperCase()}</div>
+            {/* handle */}
+            <div className="absolute bottom-[22px] left-1/2 h-[14px] w-[120px] -translate-x-1/2 rounded-full bg-[#2b2724] shadow-[0_2px_0_rgba(255,255,255,.3)]" />
           </motion.div>
         )}
       </AnimatePresence>

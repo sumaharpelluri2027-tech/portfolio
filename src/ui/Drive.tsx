@@ -70,7 +70,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
   useEffect(() => { arena.current?.setPaused(!!detail || board || !!ask); }, [detail, board, ask]);
 
   const prepare = useCallback((k: number) => {
-    const a = ACTIVITIES[k]; arena.current?.preview(a.key); const f = freshScore(a); scoreRef.current = f; setScore(f);
+    const a = ACTIVITIES[k]; const f = freshScore(a); scoreRef.current = f; setScore(f);
     setChoice(null); setAi(k); setProg(0); setKmh(0); setPhase("ask");
   }, []);
 
@@ -204,7 +204,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>{started && phase === "ask" && !overlay && <AskCard key={`ask${ai}`} a={act} talk={talk} onChoose={choose} />}</AnimatePresence>
+      <AnimatePresence>{started && phase === "ask" && !overlay && <ForkBanner key={`ask${ai}`} a={act} talk={talk} arena={arena.current} onChoose={choose} />}</AnimatePresence>
       <AnimatePresence>{started && phase === "explain" && choice && !overlay && <ExplainCard key={`ex${ai}`} a={act} c={choice} s={score} role={role} talk={talk} onNext={next} onMore={() => setDetail(act.card)} />}</AnimatePresence>
       <AnimatePresence>{phase === "data" && !overlay && <DataCard log={log} talk={talk} onDone={() => { voice.stop(); setPhase("award"); }} />}</AnimatePresence>
 
@@ -229,33 +229,32 @@ function useNarration(lines: Line[], talk: boolean) {
   return { i, done };
 }
 
-/** The founder's call, before the drive. The options unlock once the situation has been heard. */
-function AskCard({ a, talk, onChoose }: { a: Activity; talk: boolean; onChoose: (c: Choice) => void }) {
-  const { done } = useNarration([a.question], talk);
+/** The founder's call happens on the road: a fork with one lane per option. The barriers lift once the situation has been heard. */
+function ForkBanner({ a, talk, arena, onChoose }: { a: Activity; talk: boolean; arena: ArenaAPI | null; onChoose: (c: Choice) => void }) {
+  const [open, setOpen] = useState(false);
+  const pick = useRef(onChoose); pick.current = onChoose;
+  useEffect(() => {
+    let alive = true;
+    arena?.decide(a.key, a.choices, (id) => { const c = a.choices.find((x) => x.id === id); if (c && alive) pick.current(c); });
+    voice.setMuted(!talk);
+    voice.sayAll([a.question]).then((ok) => { if (alive && ok !== false) { arena?.openGates(); setOpen(true); } });
+    return () => { alive = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const keys = a.choices.length === 3 ? ["←", "↑", "→"] : ["←", "→"];
   return (
-    <motion.div className="absolute inset-0 z-30 grid place-items-center overflow-y-auto bg-black/35 p-4 pt-[120px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <motion.div role="dialog" aria-label={`${a.vertical}: your call`} initial={{ scale: 0.9, y: 24, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 220, damping: 20 }}
-        className="w-full max-w-[620px] overflow-hidden rounded-3xl bg-oil/95 backdrop-blur" style={{ boxShadow: `0 0 0 2px ${a.color}, 0 0 70px ${a.color}55` }}>
-        <div className="p-5 md:p-6" style={{ background: `radial-gradient(circle at 50% 0%, ${a.color}40, transparent 70%)` }}>
-          <div className="text-center font-mono text-[11px] font-bold tracking-[0.25em]" style={{ color: a.color }}>{a.emoji} {a.title} · {a.n} OF {ACTIVITIES.length} · YOUR CALL</div>
-          <div className="mt-0.5 text-center text-[12px] text-paper/55">{a.world}</div>
-          <p className="mx-auto mt-3 max-w-[30ch] text-center font-cond text-[clamp(22px,3.4vw,30px)] font-semibold leading-tight">{a.question.text}</p>
-          <div className={`mt-5 grid gap-2 ${a.choices.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-            {a.choices.map((c, k) => (
-              <motion.button key={c.id} type="button" disabled={!done} onClick={() => onChoose(c)} initial={{ opacity: 0, y: 10 }} animate={{ opacity: done ? 1 : 0.45, y: 0 }} transition={{ delay: 0.15 + k * 0.08 }}
-                className="rounded-2xl border-2 border-white/15 bg-white/[.04] p-4 text-left transition-colors enabled:hover:bg-white/[.08] disabled:cursor-not-allowed"
-                onMouseEnter={(e) => { if (done) e.currentTarget.style.borderColor = a.color; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = ""; }}>
-                <div className="font-mono text-[10px] font-bold tracking-wider text-paper/45">OPTION {String.fromCharCode(65 + k)}</div>
-                <div className="mt-0.5 font-cond text-[20px] font-bold leading-tight">{c.label}</div>
-                <div className="mt-0.5 text-[13px] leading-snug text-paper/65">{c.sub}</div>
-              </motion.button>
-            ))}
-          </div>
-          <div className="mt-3 text-center text-[12.5px] text-paper/50">
-            {done ? "Pick one. Then drive it." : "🔊 Listen first…"}
-          </div>
+    <motion.div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
+      <div role="dialog" aria-label={`${a.vertical}: your call`} className="pointer-events-auto w-full max-w-[640px] rounded-2xl bg-oil/90 p-4 text-center backdrop-blur" style={{ boxShadow: `0 0 0 2px ${a.color}, 0 0 50px ${a.color}44` }}>
+        <div className="font-mono text-[10.5px] font-bold tracking-[0.25em]" style={{ color: a.color }}>{a.emoji} {a.title} · {a.n} OF {ACTIVITIES.length} · YOUR CALL · {a.world.toUpperCase()}</div>
+        <p className="mx-auto mt-1.5 max-w-[34ch] font-cond text-[clamp(19px,2.8vw,25px)] font-semibold leading-tight">{a.question.text}</p>
+        <div className="mt-2.5 text-[13px] text-paper/70">{open ? <><b className="text-hazard">Steer into your call.</b> The road you take is your answer.</> : "🔊 Listen first. The barriers lift when I'm done."}</div>
+        <div className={`mt-2.5 grid gap-1.5 ${a.choices.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+          {a.choices.map((c, k) => (
+            <button key={c.id} type="button" disabled={!open} onClick={() => arena?.pick(k)} className="rounded-xl border border-white/15 bg-white/[.05] px-2 py-1.5 text-[12.5px] leading-tight transition-opacity enabled:hover:border-hazard disabled:opacity-40">
+              <span className="mr-1 font-mono font-bold text-hazard">{keys[k]}</span>{c.label}
+            </button>
+          ))}
         </div>
-      </motion.div>
+      </div>
     </motion.div>
   );
 }

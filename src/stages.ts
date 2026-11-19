@@ -59,7 +59,7 @@ export const ACTIVITIES: Activity[] = [
     },
   },
   {
-    n: 2, key: "funnel", title: "MARKETING", vertical: "Marketing & growth", trait: "Finds the leak", emoji: "🚀", color: "#ff7043",
+    n: 2, key: "funnel", title: "MARKETING", vertical: "Marketing & sales", trait: "Finds the leak", emoji: "🚀", color: "#ff7043",
     theme: 3, themeName: "Night", decor: 3, card: "accelerator", world: "🌃 Neon city · night",
     question: { key: "marketing-q", text: "Leads come in, but nine in ten never buy. What do you do first?" },
     choices: [

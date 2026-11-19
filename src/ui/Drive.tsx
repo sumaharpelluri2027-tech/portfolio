@@ -31,7 +31,7 @@ const BACK: Record<Activity["key"], string> = {
 export default function Drive({ onExit }: { onExit: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const arena = useRef<ArenaAPI | null>(null);
-  const [auto, setAuto] = useState(true);
+  const [auto, setAuto] = useState(false);
   const music = useRef(createMusic());
   const [started, setStarted] = useState(false);
   const [phase, setPhase] = useState<Phase>("ask");
@@ -91,15 +91,19 @@ export default function Drive({ onExit }: { onExit: () => void }) {
     if (talk) voice.say(c.outcome.text, c.outcome.key);
   };
 
+  // play the verticals in any order; next goes to the first one not yet played
+  const played = new Set(log.map((x) => x.a.n - 1));
+  const nextOpen = (from: number) => { for (let d = 1; d <= ACTIVITIES.length; d++) { const k = (from + d) % ACTIVITIES.length; if (!played.has(k) && k !== from) return k; } return -1; };
   const next = useCallback(() => {
     voice.stop();
-    if (ai < ACTIVITIES.length - 1) prepare(ai + 1);
-    else setPhase("data");
-  }, [ai, prepare]);
+    const k = nextOpen(ai);
+    if (k >= 0) prepare(k); else setPhase("data");
+  }, [ai, prepare, log]); // eslint-disable-line react-hooks/exhaustive-deps
+  const jump = (k: number) => { if (phase === "drive") return; voice.stop(); prepare(k); };
 
   const applySound = (on: boolean) => { setSound(on); music.current.setOn(on); if (on) music.current.start(); };
   const applyTalk = (on: boolean) => { setTalk(on); voice.setMuted(!on); if (!on) voice.stop(); };
-  const begin = () => { applySound(sound); voice.setMuted(!talk); prepare(0); setStarted(true); };
+  const begin = (k = 0) => { applySound(sound); voice.setMuted(!talk); prepare(k); setStarted(true); };
   const resume = useCallback(() => { setDetail(null); setBoard(false); setAsk(null); }, []);
   const overlay = !!detail || board || !!ask;
   const driving = started && phase === "drive" && !overlay;
@@ -119,14 +123,19 @@ export default function Drive({ onExit }: { onExit: () => void }) {
 
       {started && phase !== "data" && phase !== "award" && (
         <div className="pointer-events-none absolute inset-x-0 top-[70px] z-[35] flex justify-center px-4">
-          <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/55 px-2 py-1.5 backdrop-blur">
-            {ACTIVITIES.map((a, k) => (
-              <span key={a.n} className="flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-[10.5px] font-bold tracking-wider"
-                style={{ background: k === ai ? a.color : k < ai ? `${a.color}33` : "transparent", color: k === ai ? "#14110e" : k < ai ? a.color : "rgba(239,233,220,.45)" }}>
-                {a.emoji}<span className="hidden sm:inline">{a.title}</span>{k < ai && " ✓"}
-              </span>
-            ))}
-          </div>
+          <nav aria-label="Choose a vertical" className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-black/55 px-2 py-1.5 backdrop-blur">
+            {ACTIVITIES.map((a, k) => {
+              const done = played.has(k), cur = k === ai;
+              return (
+                <button key={a.n} type="button" onClick={() => jump(k)} disabled={phase === "drive"} aria-current={cur ? "step" : undefined} title={phase === "drive" ? "Finish this drive first" : `Play ${a.vertical}`}
+                  className="flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-[10.5px] font-bold tracking-wider transition-colors enabled:hover:brightness-125 disabled:cursor-default"
+                  style={{ background: cur ? a.color : done ? `${a.color}33` : "rgba(255,255,255,.06)", color: cur ? "#14110e" : done ? a.color : "rgba(239,233,220,.75)" }}>
+                  {a.emoji}<span className="hidden sm:inline">{a.title}</span>{done && " ✓"}
+                </button>
+              );
+            })}
+            {played.size > 0 && <button type="button" onClick={() => { if (phase !== "drive") { voice.stop(); setPhase("data"); } }} disabled={phase === "drive"} className="rounded-full px-2.5 py-1 font-mono text-[10.5px] font-bold tracking-wider text-[#36c8ff] enabled:hover:bg-white/10">📊<span className="hidden sm:inline"> SUMMARY</span></button>}
+          </nav>
         </div>
       )}
 
@@ -167,7 +176,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
               onPointerDown={() => arena.current?.setSteer(v)} onPointerUp={() => arena.current?.setSteer(0)} onPointerLeave={() => arena.current?.setSteer(0)} onPointerCancel={() => arena.current?.setSteer(0)}>{v < 0 ? "◀" : "▶"}</button>
           ))}
         </div>
-      ) : <p className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 text-center font-mono text-[11px] tracking-[0.16em] text-paper/80">{auto ? "AUTOPILOT IS DRIVING · PRESS ← → OR A / D TO TAKE THE WHEEL" : "YOU'RE DRIVING · ← → OR A / D TO STEER · ↓ TO BRAKE"}</p>)}
+      ) : <p className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 text-center font-mono text-[11px] tracking-[0.16em] text-paper/80">{auto ? "AUTOPILOT IS DRIVING · PRESS ← → TO TAKE THE WHEEL BACK" : "YOU'RE DRIVING · ← → OR A / D TO STEER · GAS IS AUTOMATIC · ↓ BRAKES"}</p>)}
 
       <AnimatePresence>
         {!started && (
@@ -176,15 +185,16 @@ export default function Drive({ onExit }: { onExit: () => void }) {
               className="w-full max-w-[600px] rounded-2xl border-2 border-hazard bg-oil/95 p-5 text-center shadow-[0_0_60px_rgba(242,183,5,.3)] md:p-6">
               <div className="font-mono text-[11px] font-bold tracking-[0.25em] text-hazard">THINK LIKE A FOUNDER</div>
               <h2 className="mt-1 font-stencil text-[32px] leading-none">FOUR CALLS. FOUR TEST DRIVES.</h2>
-              <p className="mt-2 text-[14.5px] text-paper/80">Make the call, then drive it: steer yourself or let autopilot take it. About fifteen seconds each. Then hear what I actually did.</p>
+              <p className="mt-2 text-[14.5px] text-paper/80">Pick a vertical, or play all four. You steer (the gas is automatic); steer into the road you'd take, then hear what I actually did.</p>
               <div className="mt-4 grid grid-cols-2 gap-2 text-left sm:grid-cols-4">
-                {ACTIVITIES.map((a) => (
-                  <div key={a.n} className="rounded-xl p-2.5" style={{ background: a.color + "1f", border: `1px solid ${a.color}66` }}>
+                {ACTIVITIES.map((a, k) => (
+                  <button key={a.n} type="button" onClick={() => begin(k)} className="rounded-xl p-2.5 text-left transition-transform hover:-translate-y-0.5" style={{ background: a.color + "1f", border: `1px solid ${a.color}66` }}>
                     <div className="text-[20px] leading-none">{a.emoji}</div>
                     <div className="mt-1 font-cond text-[15px] font-bold leading-tight">{a.vertical}</div>
                     <div className="mt-0.5 text-[11.5px] leading-tight text-paper/65">{TASK[a.key]}</div>
                     <div className="mt-1 text-[10.5px] leading-tight text-paper/45">{a.world}</div>
-                  </div>
+                    <div className="mt-1.5 font-mono text-[10px] font-bold tracking-wider" style={{ color: a.color }}>PLAY THIS →</div>
+                  </button>
                 ))}
               </div>
               <div className="mt-2 font-mono text-[10.5px] tracking-wider text-[#36c8ff]">📊 DATA RUNS UNDER ALL FOUR · ABOUT 2 MINUTES</div>
@@ -193,7 +203,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
                 {ROLES.map((r) => <button key={r.id} type="button" role="radio" aria-checked={role === r.id} onClick={() => setRole(r.id)} className={`rounded-full px-3 py-1.5 text-[13px] ${role === r.id ? "bg-hazard font-semibold text-ink" : "border border-white/20 text-paper/75 hover:border-white/50"}`}>{r.label}</button>)}
               </div>
               <div className="mt-5 flex justify-center">
-                <button type="button" onClick={begin} className="inline-flex items-center gap-2 rounded-full bg-hazard px-7 py-3 font-mono text-[13px] font-bold tracking-wider text-ink hover:brightness-110">START <ArrowRight size={16} /></button>
+                <button type="button" onClick={() => begin(0)} className="inline-flex items-center gap-2 rounded-full bg-hazard px-7 py-3 font-mono text-[13px] font-bold tracking-wider text-ink hover:brightness-110">PLAY ALL FOUR <ArrowRight size={16} /></button>
               </div>
               <div className="mt-3 flex justify-center gap-4 text-[12.5px] text-paper/60">
                 <label className="flex items-center gap-1.5"><input type="checkbox" checked={talk} onChange={(e) => setTalk(e.target.checked)} className="accent-[#f2b705]" /> Narrator</label>
@@ -205,7 +215,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
       </AnimatePresence>
 
       <AnimatePresence>{started && phase === "ask" && !overlay && <ForkBanner key={`ask${ai}`} a={act} talk={talk} arena={arena.current} onChoose={choose} />}</AnimatePresence>
-      <AnimatePresence>{started && phase === "explain" && choice && !overlay && <ExplainCard key={`ex${ai}`} a={act} c={choice} s={score} role={role} talk={talk} onNext={next} onMore={() => setDetail(act.card)} />}</AnimatePresence>
+      <AnimatePresence>{started && phase === "explain" && choice && !overlay && <ExplainCard key={`ex${ai}`} a={act} c={choice} s={score} role={role} talk={talk} nx={nextOpen(ai) >= 0 ? ACTIVITIES[nextOpen(ai)] : undefined} onNext={next} onMore={() => setDetail(act.card)} />}</AnimatePresence>
       <AnimatePresence>{phase === "data" && !overlay && <DataCard log={log} talk={talk} onDone={() => { voice.stop(); setPhase("award"); }} />}</AnimatePresence>
 
       <Sheet open={isPart(detail)} onClose={resume} label="The full story">{isPart(detail) && <JobCardView id={detail} onBonnet={resume} />}</Sheet>
@@ -260,11 +270,11 @@ function ForkBanner({ a, talk, arena, onChoose }: { a: Activity; talk: boolean; 
 }
 
 /** What this function means, what I did, and why it matters to you. Next unlocks once it has been heard. */
-function ExplainCard({ a, c, s, role, talk, onNext, onMore }: { a: Activity; c: Choice; s: Score; role: RoleId; talk: boolean; onNext: () => void; onMore: () => void }) {
+function ExplainCard({ a, c, s, role, talk, nx, onNext, onMore }: { a: Activity; c: Choice; s: Score; role: RoleId; talk: boolean; nx?: Activity; onNext: () => void; onMore: () => void }) {
   const roleLabel = ROLES.find((x) => x.id === role)?.label ?? "your team";
   const lines: Line[] = [...a.explain, { key: `${a.key}-fit-${role}`, text: a.fit[role] }];
   const { i, done } = useNarration(lines, talk);
-  const nx = ACTIVITIES[a.n];
+
   const best = a.choices.find((x) => x.best)!;
   const yours = a.key === "road" ? (c.best ? "You took the mountain pass. So did I." : `The ${c.label.toLowerCase()} got you ${Math.round(s.prog * 100)}% of the way. I took the mountain pass.`)
     : a.key === "funnel" ? (c.best ? `You fixed the leaks: conversion hit ${s.conv}%.` : `More ads kept conversion at ${s.conv}%. I went after the leak.`)
@@ -365,7 +375,7 @@ function DataCard({ log, talk, onDone }: { log: { a: Activity; c: Choice; s: Sco
       <motion.div role="dialog" aria-label="Data ran every step" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-[580px] rounded-3xl border-2 border-[#36c8ff] bg-[#07111c] p-5 shadow-[0_0_80px_rgba(54,200,255,.35)] md:p-6">
         <div className="text-center font-mono text-[11px] font-bold tracking-[0.25em] text-[#36c8ff]">📊 THE LAST WORD</div>
         <div className="mt-1 text-center font-stencil text-[clamp(28px,6vw,38px)] leading-none">{DATA_FINALE.title}</div>
-        <div className="mt-2 text-center text-[13.5px] text-paper/65">Your four calls: <b className="text-paper">{best} of 4</b> matched mine.</div>
+        <div className="mt-2 text-center text-[13.5px] text-paper/65">Your calls: <b className="text-paper">{best} of {log.length}</b> matched mine.</div>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {log.map((x) => (
             <div key={x.a.n} className="rounded-lg border bg-[#0c1a2a] p-2 text-center" style={{ borderColor: `${x.a.color}55` }}>

@@ -90,7 +90,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xffffff, 50, 300);
   const camera = new THREE.PerspectiveCamera(58, W() / H(), 0.1, 2000);
-  const composer = low ? null : new EffectComposer(renderer, new THREE.WebGLRenderTarget(W(), H(), { type: THREE.HalfFloatType, samples: 4 }));
+  const composer = low ? null : new EffectComposer(renderer, new THREE.WebGLRenderTarget(W(), H(), { type: THREE.HalfFloatType, samples: Math.min(4, renderer.capabilities.maxSamples) }));
   let bloom: UnrealBloomPass | null = null, grade: ShaderPass | null = null;
   if (composer) {
     composer.addPass(new RenderPass(scene, camera));
@@ -101,9 +101,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
       uniforms: { tDiffuse: { value: null }, uBlur: { value: 0 }, uVig: { value: 0.32 }, uSat: { value: 1.12 } },
       vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }",
       fragmentShader: `uniform sampler2D tDiffuse; uniform float uBlur, uVig, uSat; varying vec2 vUv;
-        void main(){ vec2 c = vec2(.5, .55), d = vUv - c; vec3 col = vec3(0.); float w = 0.;
-          for (int i = 0; i < 8; i++) { float k = float(i) / 7.; float s = 1. - uBlur * k * .06 * smoothstep(.08, .5, length(d)); col += texture2D(tDiffuse, c + d * s).rgb; w += 1.; }
-          col /= w; float l = dot(col, vec3(.299,.587,.114)); col = mix(vec3(l), col, uSat); col = (col - .5) * 1.06 + .5;
+        void main(){ vec3 col = texture2D(tDiffuse, vUv).rgb; float l = dot(col, vec3(.299,.587,.114)); col = mix(vec3(l), col, uSat); col = (col - .5) * 1.06 + .5;
           col *= 1. - uVig * smoothstep(.35, .95, length((vUv - .5) * vec2(1.25, 1.)));
           gl_FragColor = vec4(col, 1.); }`,
     });
@@ -222,14 +220,37 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     const m = std(0xffffff, 0.55, 0, { map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: kind === "funnel" ? 0.55 : 0.08 }); logoMats.set(k, m); return m;
   }
   /** a line of sponsor boards along both road edges, like a race circuit */
+  /** each vertical's boards: [logo file or "#NAME" for a project without a logo, the fact] */
+  const STORY: Record<GameKind, [string, string][]> = {
+    road: [["rabbit-invest", "B2C → B2B2C, PROPOSED"], ["masters-union", "THE KEN · ROUND 2"], ["#IKSHANA Z INC", "DELAWARE CALL ADOPTED"], ["rabbit-invest", "COST vs REVENUE MODEL"], ["masters-union", "VANTAGE · GAMBIT CASES"], ["rabbit-invest", "COMPETITOR TEARDOWN"]],
+    funnel: [["rabbit-invest", "CONVERSION 10% → 50%"], ["myntra", "FUNNEL → CEO-LEVEL CALL"], ["#DECCO STORE", "₹3L SALES IN 30 DAYS"], ["rabbit-invest", "LEADS ON AUTOPILOT"], ["#DECCO STORE", "I SOLD AT THE STALL"], ["myntra", "DATA ANALYST INTERN"]],
+    orders: [["rabbit-invest", "80% MANUAL WORK AUTOMATED"], ["wipro", "CRM FOR 100+ ACCOUNTS"], ["ai-analytics-wing", "RECRUITMENT WORKBOOK"], ["rabbit-invest", "OPS BUILT FROM ZERO"], ["wipro", "+40% PIPELINE VISIBILITY"], ["rabbit-invest", "SENIOR ASSOCIATE → LEAD"]],
+    runway: [["rabbit-invest", "₹2.5 CR AUM, YEAR ONE"], ["rabbit-invest", "FUND ENGINE IN 2–3 DAYS"], ["#BOARDIQ", "AI FOR INVESTORS · LIVE"], ["rabbit-invest", "MVP WITH THE FOUNDER"], ["#KINFOLIO", "BUSINESS MODEL"], ["rabbit-invest", "EXCHANGE · KYC · APIs"]],
+  };
+  const factMats = new Map<string, THREE.Material>();
+  function factMat(logo: string, fact: string, accent: string) {
+    const k = logo + fact + accent; if (factMats.has(k)) return factMats.get(k)!;
+    const named = logo.startsWith("#");
+    const t = liveTex(768, 200, named ? [] : [`logos/${logo}.png`], (g, [im]) => {
+      g.fillStyle = "#ffffff"; g.fillRect(0, 0, 768, 200); g.fillStyle = accent; g.fillRect(0, 0, 768, 12); g.fillRect(0, 188, 768, 12);
+      let x = 28;
+      if (named) { g.fillStyle = "#14110e"; g.font = `700 30px ${MONO}`; g.textBaseline = "middle"; const w = g.measureText(logo.slice(1)).width + 30; g.beginPath(); g.roundRect(24, 66, w, 68, 12); g.fill(); g.fillStyle = "#ffffff"; g.fillText(logo.slice(1), 39, 101); x = 24 + w + 22; }
+      else if (im) { fitImg(g, im, 24, 30, 170, 140); x = 214; }
+      g.fillStyle = "#14110e"; g.textBaseline = "middle"; let fs = 46; g.font = `${fs}px ${STENCIL}`; while (g.measureText(fact).width > 768 - x - 24 && fs > 24) { fs -= 2; g.font = `${fs}px ${STENCIL}`; }
+      g.fillText(fact, x, 104);
+    });
+    const m = std(0xffffff, 0.55, 0, { map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: kind === "funnel" ? 0.55 : 0.08 }); factMats.set(k, m); return m;
+  }
   function hoardings(g: THREE.Group, len: number, halfW: number, roadX: (z: number) => number, h: (x: number, z: number) => number, accent: string, skip: (z: number) => boolean = () => false, every = 11) {
-    const back = std(0x1b1d22, 0.6, 0.4), boardG = new THREE.BoxGeometry(3.4, 0.95, 0.08), postG = new THREE.BoxGeometry(0.08, 0.6, 0.08);
+    const back = std(0x1b1d22, 0.6, 0.4), boardG = new THREE.BoxGeometry(3.8, 1.0, 0.08), postG = new THREE.BoxGeometry(0.08, 0.6, 0.08);
+    const story = STORY[kind];
     let k = 0;
     for (let z = 6; z < len; z += every) for (const sx of [-1, 1]) {
       if (skip(z)) continue;
       const x = roadX(z) + sx * (halfW + 0.7), y = h(x, z), yaw = Math.atan2(roadX(z + 1) - roadX(z - 1), 2);
-      const name = LOGOS[(k++ + (sx > 0 ? 3 : 0)) % LOGOS.length];
-      const b = new THREE.Mesh(boardG, [back, back, back, back, logoMat(name, accent), logoMat(name, accent)]);
+      const [lg, fact] = story[(k++ + (sx > 0 ? 3 : 0)) % story.length];
+      const fm = factMat(lg, fact, accent);
+      const b = new THREE.Mesh(boardG, [back, back, back, back, fm, fm]);
       b.position.set(x, y + 0.95, z); b.rotation.y = yaw + sx * (Math.PI / 2 - 0.35); b.castShadow = true; g.add(b);
       for (const px of [-1.4, 1.4]) { const p = new THREE.Mesh(postG, back); p.position.set(px, -0.75, 0); b.add(p); }
     }
@@ -357,7 +378,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
 
   /* --- input --- */
   const keys = new Set<string>();
-  let touchSteer = 0, auto = true, hooks: GameHooks | null = null;
+  let touchSteer = 0, auto = false, hooks: GameHooks | null = null;
   const onKey = (e: KeyboardEvent, down: boolean) => {
     const t = e.target as HTMLElement | null; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
     const k = e.key.toLowerCase(); if (!["arrowleft", "arrowright", "arrowup", "arrowdown", "a", "d", "w", "s"].includes(k)) return;
@@ -417,9 +438,9 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
       const tex = canvasTex(512, 300, (c) => {
         c.fillStyle = "#0f1a2a"; c.fillRect(0, 0, 512, 300); c.strokeStyle = "#f4efe2"; c.lineWidth = 8; c.strokeRect(10, 10, 492, 280);
         c.fillStyle = "#f2b705"; c.beginPath(); c.arc(70, 76, 44, 0, 7); c.fill(); c.fillStyle = "#14110e"; c.font = `700 56px ${MONO}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(keysFor[i], 70, 80);
-        c.fillStyle = "#ffffff"; c.textAlign = "left"; c.font = `64px ${STENCIL}`; const words = o.label.toUpperCase().split(" "); let line = "", y = 82; const lines: string[] = [];
-        for (const w of words) { if (c.measureText(line + w).width > 360 && line) { lines.push(line.trim()); line = ""; } line += w + " "; } lines.push(line.trim());
-        lines.slice(0, 2).forEach((l, j) => c.fillText(l, 130, y + j * 64)); y += 64 * Math.min(2, lines.length);
+        c.fillStyle = "#ffffff"; c.textAlign = "left"; const words = o.label.toUpperCase().split(" "); let lines: string[] = [], fs = 64;
+        for (; fs >= 36; fs -= 6) { c.font = `${fs}px ${STENCIL}`; lines = []; let line = ""; for (const w of words) { if (c.measureText(line + w).width > 360 && line) { lines.push(line.trim()); line = ""; } line += w + " "; } lines.push(line.trim()); if (lines.length <= 2) break; }
+        let y = 82; lines.slice(0, 3).forEach((l, j) => c.fillText(l, 130, y + j * fs)); y += fs * Math.min(3, lines.length);
         c.fillStyle = "#9fd0ff"; c.font = `500 30px ${MONO}`; c.fillText(o.sub, 34, Math.max(y + 30, 230));
       });
       const mat = std(0xffffff, 0.5, 0, { map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.35 }); signs.push(mat);
@@ -468,7 +489,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
   }
   function clear() {
     if (course) { scene.remove(course.group); course.group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh || (o as THREE.InstancedMesh).isInstancedMesh) m.geometry?.dispose(); }); }
-    disposables.splice(0).forEach((d) => d.dispose());
+    disposables.splice(0).forEach((d) => d.dispose()); factMats.clear(); logoMats.clear();
     course = null;
   }
   function load(k: GameKind, choice: string) {
@@ -494,6 +515,8 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     } else {
       thr = keys.has("arrowdown") || keys.has("s") ? -0.6 : 1; // the gas is on by default: you steer
       steer = (kl ? 1 : 0) - (kr ? 1 : 0) + touchSteer * -1;
+      // hands off: gently follow the bends, but never pick a lane for you
+      if (Math.abs(steer) < 0.05) { const ahead = Math.atan2(c.roadX(car.z + 8) - c.roadX(car.z), 8); steer = clamp((ahead - car.yaw) * 1.6, -0.6, 0.6); }
     }
     if (finished) thr = -0.4;
     if (car.stopT > 0) { car.stopT -= dt; car.v = Math.max(0, car.v - 40 * dt); }
@@ -508,7 +531,6 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     car.boostT -= dt;
     // steering (yaw follows input, softened at low speed)
     car.yaw += steer * 1.5 * dt * clamp(car.v / 5, 0, 1) * (car.air ? 0.2 : 1);
-    if (Math.abs(steer) < 0.05 && !car.air && !(auto || mode !== "run")) car.yaw *= 1 - damp(0.6, dt);
     car.yaw = clamp(car.yaw, -0.75, 0.75);
     car.x += Math.sin(car.yaw) * car.v * dt; car.z += Math.cos(car.yaw) * car.v * dt;
     // the road edges
@@ -582,9 +604,8 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     spinMat.opacity = clamp(car.v / 6, 0, 0.85); spins.forEach((d, i) => { d.rotation.x += car.v * dt * 3.4 * (i < 2 ? -1 : 1); });
     const sp = mode === "run" ? clamp((car.v - 9) / 10, 0, 1) + (boosting ? 0.6 : 0) : 0;
     if (SL) { slMat.opacity = sp * 0.5; for (let i = 0; i < SL; i++) { let ph = slSeed[i * 3 + 2] + dt * (1.5 + car.v * 0.12); ph -= Math.floor(ph); slSeed[i * 3 + 2] = ph; const z0 = -30 + ph * 28, L = 1.5 + sp * 4; slPos.set([slSeed[i * 3], slSeed[i * 3 + 1], z0, slSeed[i * 3] * 1.04, slSeed[i * 3 + 1] * 1.04, z0 + L], i * 6); } slGeo.attributes.position.needsUpdate = true; }
-    if (grade) grade.uniforms.uBlur.value += ((sp * 0.9) - grade.uniforms.uBlur.value) * damp(4, dt);
     // keep it smooth: if the device can't hold ~40 fps, drop resolution and the heaviest effects
-    if (!degraded && dt > 0 && mode === "run") { fpsT += dt; fpsN++; if (fpsT > 2.5) { if (fpsN / fpsT < 38) { degraded = true; renderer.setPixelRatio(1); key.shadow.mapSize.set(1024, 1024); key.shadow.map?.dispose(); key.shadow.map = null; if (bloom) bloom.enabled = false; onResize(); } fpsT = 0; fpsN = 0; } }
+    if (!degraded && dt > 0 && mode === "run") { fpsT += dt; fpsN++; if (fpsT > 2.5) { if (fpsN / fpsT < 34) { degraded = true; renderer.setPixelRatio(Math.max(1, Math.min(window.devicePixelRatio, 1.25))); if (bloom) bloom.enabled = kind === "funnel"; onResize(); } fpsT = 0; fpsN = 0; } }
     buggy.update(dt, t);
     updateCamera(dt);
     if (composer) composer.render(); else renderer.render(scene, camera);
@@ -778,7 +799,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     const leakLabel = (() => { const c = document.createElement("canvas"); c.width = 512; c.height = 128; leakTex = new THREE.CanvasTexture(c); leakTex.colorSpace = THREE.SRGBColorSpace; track(leakTex); const sp = new THREE.Sprite(track(new THREE.SpriteMaterial({ map: leakTex, depthWrite: false, fog: false }))); sp.scale.set(6, 1.5, 1); sp.position.set(FX, 1.6, FZ - 5); g.add(sp); return c; })();
     const drawLeak = (conv: number) => { const k = leakLabel.getContext("2d")!; k.clearRect(0, 0, 512, 128); k.fillStyle = conv >= 50 ? "#2bff88" : "#ef5350"; k.beginPath(); k.roundRect(4, 4, 504, 120, 30); k.fill(); k.fillStyle = "#14110e"; k.font = `700 54px ${MONO}`; k.textAlign = "center"; k.textBaseline = "middle"; k.fillText(`${100 - conv}% LEAK OUT · ${conv}% BUY`, 256, 68); if (leakTex) leakTex.needsUpdate = true; };
     drawLeak(10);
-    let conv = 10, hit = 0, launched = false, landed = false;
+    let conv = 10, hit = 0, fixes = 0, launched = false, landed = false;
     hooks?.onScore({ conv });
     return {
       group: g, len, halfW, vmax: 13, acc: 7, dust: 0x7a6aa8,
@@ -786,7 +807,8 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
       aim: () => 0,
       tick(dt, t, c) {
         if (hit < pads.length && c.z >= pads[hit]) {
-          if (leak) { conv = [23, 36, 50][hit]; c.boostT = 1.3; c.v += 3.5; shake = 0.15; hooks?.onPop(`${padNames[hit]} · CONVERSION ${conv}%`, "#ff7043"); }
+          if (Math.abs(c.x) > 2.6) { hooks?.onPop(leak ? "MISSED IT · THAT LEAK STAYS OPEN" : "MISSED THE AD", "#9e9e9e"); }
+          else if (leak) { fixes++; conv = [10, 23, 36, 50][fixes]; c.boostT = 1.3; c.v += 3.5; shake = 0.15; hooks?.onPop(`${padNames[hit]} · CONVERSION ${conv}%`, "#ff7043"); }
           else { conv = Math.min(16, conv + 2); for (let k = 0; k < 40; k++) emit(c.x + (Math.random() - 0.5) * 8, 2 + Math.random() * 5, c.z + 4, (Math.random() - 0.5) * 8, Math.random() * 4, -4 - Math.random() * 6, 0xffffff); hooks?.onPop("MORE LEADS IN · MOST LEAK OUT", "#ff5fb0"); }
           hit++; hooks?.onScore({ conv }); drawLeak(conv);
         }
@@ -883,7 +905,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
           if ((p.state === "ahead" || p.state === "drop") && Math.abs(p.z - 1.2 - c.z) < 1.1 && Math.abs(p.o.position.x - c.x) < 2.3) {
             p.state = "fixing"; fixing = p; hits++; p.lb.visible = false; c.z = p.z - 2.4; c.v = 0;
             c.stopT = !fire && !sop ? 1.1 : 0.65;
-            if (!fire && !sop) { sop = true; hooks?.onPop("FIXED ONCE · SOP WRITTEN · AUTOMATED", "#ffca28"); hooks?.onScore({ auto: true }); }
+            if (!fire && !sop) { sop = true; hooks?.onPop("SOP WRITTEN · THE SYSTEM TAKES THE WHEEL", "#ffca28"); hooks?.onScore({ auto: true }); if (!auto) { auto = true; hooks?.onAuto?.(true); } }
             else hooks?.onPop(`${p.n} · FIXING BY HAND`, "#ef5350");
             hooks?.onScore({ orders: hits }); shake = 0.25;
           } else if ((p.state === "ahead") && c.z > p.z + 1.5) { p.state = "dodged"; dodged++; hooks?.onPop(sop ? `${p.n} · AUTO-ROUTED` : `${p.n} · DODGED`, "#ffca28"); hooks?.onScore({ dodged }); p.lb.visible = false; p.lamp.visible = false; }
@@ -935,7 +957,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     const goal = arch(len, prof(len), halfW, "₹2.5 CR · AUM", "#2bff88", "#04140a"); goal.position.x = roadX(len); g.add(goal);
     hoardings(g, len, halfW, roadX, (x, z) => (Math.abs(x - roadX(z)) > halfW ? h(x, z) : prof(z)), "#66bb6a", () => false, 13);
     { const z1 = 52, x1 = roadX(z1) + halfW + 10; billboard(g, x1, h(x1, z1) - 0.3, z1, -2.25, "cover", "rabbit-invest", "₹2.5 CR AUM", "Year one, investing app|fund engine in 2–3 days", "#66bb6a"); }
-    { const z2 = 150, x2 = roadX(z2) - halfW - 10; billboard(g, x2, h(x2, z2) - 0.3, z2, 2.25, "clean", "vit", "BAJA · AIR 8", "Mechanical engineer, VIT|I designed the brakes", "#f2b705"); }
+    { const z2 = 150, x2 = roadX(z2) - halfW - 10; billboard(g, x2, h(x2, z2) - 0.3, z2, 2.25, "clean", "rabbit-invest", "MVP · DAY ONE", "Exchange, KYC and paid APIs|set up with the founder", "#66bb6a"); }
     { const z3 = 100, x3 = roadX(z3) + halfW + 10; billboard(g, x3, h(x3, z3) - 0.3, z3, -2.25, "img/boardiq.webp", "#LIVE · AI FOR INVESTORS", "BOARDIQ", "Checks the data first,|then shows the AI's working", "#f2b705"); }
     // fuel cans
     const canM = std(0xd32f2f, 0.4, 0.3), capM2 = std(0x222222, 0.5, 0.5);

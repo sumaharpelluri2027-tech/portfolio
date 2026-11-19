@@ -4,7 +4,8 @@ import { ArrowLeft, ArrowRight, LayoutGrid, Music2, Volume2, VolumeX } from "luc
 import { createMusic } from "../scene/music";
 import { JOBS, type CarPart } from "../content";
 import { ACTIVITIES, DATA_FINALE, ROLES, type Activity, type Choice, type Line, type RoleId } from "../stages";
-import { runGame, type GameScore, type GameInput } from "../games";
+import { createArena, type ArenaAPI, type GameScore } from "../scene/arena";
+import { createBuggy } from "../scene/buggyEntry";
 import * as voice from "../narrate";
 import { JobCardView, Sheet } from "./Panels";
 import Achievement from "./Achievement";
@@ -28,7 +29,9 @@ const BACK: Record<Activity["key"], string> = {
 
 /** Four business functions, four different little games: one founder's call each, then I tell you what I did. */
 export default function Drive({ onExit }: { onExit: () => void }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
+  const host = useRef<HTMLDivElement>(null);
+  const arena = useRef<ArenaAPI | null>(null);
+  const [auto, setAuto] = useState(true);
   const music = useRef(createMusic());
   const [started, setStarted] = useState(false);
   const [phase, setPhase] = useState<Phase>("ask");
@@ -48,35 +51,34 @@ export default function Drive({ onExit }: { onExit: () => void }) {
   const [cap, setCap] = useState<string | null>(null);
   const scoreRef = useRef(score);
   const tel = useRef({ kmh: 0, prog: 0 });
-  const input = useRef<GameInput>({ left: false, right: false });
-  const stopGame = useRef<(() => void) | null>(null);
   const coarse = useRef(typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches);
   const act = ACTIVITIES[ai];
 
   useEffect(() => voice.onCaption(setCap), []);
   useEffect(() => { if (!pop) return; const id = window.setTimeout(() => setPop(null), 1700); return () => window.clearTimeout(id); }, [pop]);
-  useEffect(() => { const m = music.current; return () => { stopGame.current?.(); m.dispose(); voice.stop(); }; }, []);
+  // one 3D arena for the whole session; the first course idles behind the start screen
+  useEffect(() => {
+    if (!host.current) return;
+    const lowQ = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 760 || /[?&]low\b/.test(location.search);
+    const a = createArena({ container: host.current, createBuggy, quality: lowQ ? "low" : "high" });
+    arena.current = a; a.preview(ACTIVITIES[0].key);
+    const m = music.current;
+    return () => { a.dispose(); arena.current = null; m.dispose(); voice.stop(); };
+  }, []);
   // telemetry arrives every frame; the HUD only needs it ten times a second
   useEffect(() => { if (phase !== "drive") return; const id = window.setInterval(() => { setKmh(tel.current.kmh); setProg(tel.current.prog); }, 100); return () => window.clearInterval(id); }, [phase]);
-  // ← → steer in the ops yard
-  useEffect(() => {
-    const set = (e: KeyboardEvent, v: boolean) => { if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") input.current.left = v; if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") input.current.right = v; };
-    const dn = (e: KeyboardEvent) => set(e, true), up = (e: KeyboardEvent) => set(e, false);
-    window.addEventListener("keydown", dn); window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", dn); window.removeEventListener("keyup", up); };
-  }, []);
+  useEffect(() => { arena.current?.setPaused(!!detail || board || !!ask); }, [detail, board, ask]);
 
   const prepare = useCallback((k: number) => {
-    stopGame.current?.(); stopGame.current = null;
-    const a = ACTIVITIES[k]; const f = freshScore(a); scoreRef.current = f; setScore(f);
+    const a = ACTIVITIES[k]; arena.current?.preview(a.key); const f = freshScore(a); scoreRef.current = f; setScore(f);
     setChoice(null); setAi(k); setProg(0); setKmh(0); setPhase("ask");
   }, []);
 
   const choose = (c: Choice) => {
-    const a = ACTIVITIES[ai]; const cv = canvas.current; if (!cv) return;
+    const a = ACTIVITIES[ai]; if (!arena.current) return;
     setChoice(c); voice.stop(); setPhase("drive");
-    stopGame.current?.();
-    stopGame.current = runGame(cv, a.key, c.id, {
+    arena.current.start(a.key, c.id, {
+      onAuto: (on) => setAuto(on),
       onPop: (t, col) => setPop({ t, c: col, k: Date.now() + Math.random() }),
       onScore: (p) => { const n = { ...scoreRef.current, ...p }; scoreRef.current = n; setScore(n); },
       onTel: (kmh, prog) => { tel.current = { kmh, prog }; },
@@ -85,14 +87,14 @@ export default function Drive({ onExit }: { onExit: () => void }) {
         music.current.sting(a.n === ACTIVITIES.length ? "finish" : "all");
         setPhase("explain");
       },
-    }, input.current);
+    });
     if (talk) voice.say(c.outcome.text, c.outcome.key);
   };
 
   const next = useCallback(() => {
     voice.stop();
     if (ai < ACTIVITIES.length - 1) prepare(ai + 1);
-    else { stopGame.current?.(); stopGame.current = null; setPhase("data"); }
+    else setPhase("data");
   }, [ai, prepare]);
 
   const applySound = (on: boolean) => { setSound(on); music.current.setOn(on); if (on) music.current.start(); };
@@ -105,12 +107,13 @@ export default function Drive({ onExit }: { onExit: () => void }) {
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#1a1030]">
       <div className="absolute inset-0 transition-[background] duration-700" style={{ background: BACK[act.key] }} />
-      <canvas ref={canvas} className={`absolute inset-0 h-full w-full transition-opacity duration-300 ${phase === "drive" || phase === "explain" ? "opacity-100" : "opacity-0"}`} role="img" aria-label={`${act.vertical}: ${TASK[act.key]}`} />
+      <div ref={host} className="absolute inset-0" role="application" aria-label={`${act.vertical}: ${TASK[act.key]}. Autopilot drives; arrow keys or A and D steer.`} />
 
       <header className="absolute inset-x-0 top-0 z-[35] flex items-center gap-2 px-4 py-4 md:px-7" style={{ paddingTop: "max(16px, env(safe-area-inset-top))" }}>
         <button type="button" onClick={onExit} className="mr-auto flex items-center gap-2 rounded-full border border-white/25 bg-black/45 px-4 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard"><ArrowLeft size={14} /> GARAGE</button>
         <button type="button" onClick={() => applyTalk(!talk)} aria-label={talk ? "Mute the narrator" : "Turn the narrator on"} title="Narrator" className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-black/45 backdrop-blur hover:border-hazard">{talk ? <Volume2 size={15} /> : <VolumeX size={15} />}</button>
         <button type="button" onClick={() => applySound(!sound)} aria-label={sound ? "Mute music" : "Turn music on"} title="Music" className={`grid h-10 w-10 place-items-center rounded-full border bg-black/45 backdrop-blur hover:border-hazard ${sound ? "border-white/25" : "border-white/10 opacity-50"}`}><Music2 size={15} /></button>
+        {driving && <button type="button" onClick={() => arena.current?.setAuto(!auto)} aria-pressed={auto} className={`rounded-full border px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider backdrop-blur ${auto ? "border-hazard bg-hazard text-ink" : "border-white/25 bg-black/45 hover:border-hazard"}`}>AUTOPILOT {auto ? "ON" : "OFF"}</button>}
         <button type="button" onClick={() => setBoard(true)} className="flex items-center gap-2 rounded-full bg-hazard px-4 py-2.5 font-mono text-[11px] font-bold tracking-wider text-ink"><LayoutGrid size={14} /><span className="hidden sm:inline">SKIP TO THE WORK</span><span className="sm:hidden">WORK</span></button>
       </header>
 
@@ -157,14 +160,14 @@ export default function Drive({ onExit }: { onExit: () => void }) {
           </div>
         )}
       </AnimatePresence>
-      {driving && act.key === "orders" && (coarse.current ? (
+      {driving && (coarse.current ? (
         <div className="absolute inset-x-0 bottom-0 z-10 flex justify-between p-4" style={{ paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
-          {(["left", "right"] as const).map((k) => (
-            <button key={k} type="button" aria-label={k === "left" ? "Steer left" : "Steer right"} className="grid h-16 w-16 select-none place-items-center rounded-full border border-white/30 bg-black/50 text-2xl active:bg-hazard active:text-ink"
-              onPointerDown={() => { input.current[k] = true; }} onPointerUp={() => { input.current[k] = false; }} onPointerLeave={() => { input.current[k] = false; }}>{k === "left" ? "◀" : "▶"}</button>
+          {([-1, 1] as const).map((v) => (
+            <button key={v} type="button" aria-label={v < 0 ? "Steer left" : "Steer right"} className="grid h-16 w-16 select-none place-items-center rounded-full border border-white/30 bg-black/50 text-2xl active:bg-hazard active:text-ink"
+              onPointerDown={() => arena.current?.setSteer(v)} onPointerUp={() => arena.current?.setSteer(0)} onPointerLeave={() => arena.current?.setSteer(0)} onPointerCancel={() => arena.current?.setSteer(0)}>{v < 0 ? "◀" : "▶"}</button>
           ))}
         </div>
-      ) : <p className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 text-center font-mono text-[11px] tracking-[0.16em] text-paper/80">← → TO CHANGE LANE YOURSELF</p>)}
+      ) : <p className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 text-center font-mono text-[11px] tracking-[0.16em] text-paper/80">{auto ? "AUTOPILOT IS DRIVING · PRESS ← → OR A / D TO TAKE THE WHEEL" : "YOU'RE DRIVING · ← → OR A / D TO STEER · ↓ TO BRAKE"}</p>)}
 
       <AnimatePresence>
         {!started && (
@@ -172,8 +175,8 @@ export default function Drive({ onExit }: { onExit: () => void }) {
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} transition={{ type: "spring", stiffness: 200, damping: 18 }}
               className="w-full max-w-[600px] rounded-2xl border-2 border-hazard bg-oil/95 p-5 text-center shadow-[0_0_60px_rgba(242,183,5,.3)] md:p-6">
               <div className="font-mono text-[11px] font-bold tracking-[0.25em] text-hazard">THINK LIKE A FOUNDER</div>
-              <h2 className="mt-1 font-stencil text-[32px] leading-none">FOUR CALLS. FOUR LITTLE GAMES.</h2>
-              <p className="mt-2 text-[14.5px] text-paper/80">Make the call. Watch it play out for ten seconds. Then hear what I actually did.</p>
+              <h2 className="mt-1 font-stencil text-[32px] leading-none">FOUR CALLS. FOUR TEST DRIVES.</h2>
+              <p className="mt-2 text-[14.5px] text-paper/80">Make the call, then drive it: steer yourself or let autopilot take it. About fifteen seconds each. Then hear what I actually did.</p>
               <div className="mt-4 grid grid-cols-2 gap-2 text-left sm:grid-cols-4">
                 {ACTIVITIES.map((a) => (
                   <div key={a.n} className="rounded-xl p-2.5" style={{ background: a.color + "1f", border: `1px solid ${a.color}66` }}>
@@ -275,7 +278,7 @@ function ExplainCard({ a, c, s, role, talk, onNext, onMore }: { a: Activity; c: 
         className="w-full max-w-[580px] overflow-hidden rounded-3xl bg-oil" style={{ boxShadow: `0 0 0 2px ${a.color}, 0 0 80px ${a.color}55` }}>
         <div className="p-5 md:p-6" style={{ background: `radial-gradient(circle at 50% 0%, ${a.color}40, transparent 70%)` }}>
           <div className="text-center font-mono text-[11px] font-bold tracking-[0.25em]" style={{ color: a.color }}>{a.emoji} {a.vertical.toUpperCase()} · WHAT I DID</div>
-          <div className="mt-1 text-center text-[13.5px] text-paper/65">{yours}{!c.best && a.key !== "road" && <> <span className="text-paper/80">(My call: {best.label.toLowerCase()}.)</span></>}</div>
+          <div className="mt-1 text-center text-[13.5px] text-paper/65">{yours}{!c.best && a.key !== "road" && <> <span className="text-paper/80">(My call: {best.label}.)</span></>}</div>
           <div className="mt-3 text-center font-stencil text-[clamp(34px,6vw,46px)] leading-none" style={{ color: a.color }}>{a.result[0]}</div>
           <div className="text-center text-[13.5px] text-paper/70">{a.result[1]}</div>
           <ol className="mt-4 space-y-1.5">

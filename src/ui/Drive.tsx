@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, LayoutGrid, Music2, Volume2, VolumeX } from "luc
 import { createMusic } from "../scene/music";
 import { JOBS, type CarPart } from "../content";
 import { ACTIVITIES, DATA_FINALE, ROLES, type Activity, type Choice, type Line, type RoleId } from "../stages";
-import { createArena, type ArenaAPI, type GameScore } from "../scene/arena";
+import { createArena, type ArenaAPI, type GameScore, type LaneRow } from "../scene/arena";
 import { createBuggy } from "../scene/buggyEntry";
 import * as voice from "../narrate";
 import { JobCardView, Sheet } from "./Panels";
@@ -47,6 +47,8 @@ export default function Drive({ onExit }: { onExit: () => void }) {
   const [choice, setChoice] = useState<Choice | null>(null);
   const [score, setScore] = useState<Score>(freshScore());
   const [log, setLog] = useState<{ a: Activity; c: Choice; s: Score }[]>([]);
+  const [rows, setRows] = useState<LaneRow[]>([]);
+  const rowsRef = useRef<LaneRow[]>([]);
   const [pop, setPop] = useState<{ t: string; c: string; k: number } | null>(null);
   const [cap, setCap] = useState<string | null>(null);
   const scoreRef = useRef(score);
@@ -61,16 +63,16 @@ export default function Drive({ onExit }: { onExit: () => void }) {
     if (!host.current) return;
     const lowQ = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 760 || /[?&]low\b/.test(location.search);
     const a = createArena({ container: host.current, createBuggy, quality: lowQ ? "low" : "high" });
-    arena.current = a; a.preview(ACTIVITIES[0].key);
+    arena.current = a; a.preview(ACTIVITIES[0].key, ACTIVITIES[0].choices);
     const m = music.current;
     return () => { a.dispose(); arena.current = null; m.dispose(); voice.stop(); };
   }, []);
   // telemetry arrives every frame; the HUD only needs it ten times a second
-  useEffect(() => { if (phase !== "drive") return; const id = window.setInterval(() => { setKmh(tel.current.kmh); setProg(tel.current.prog); }, 100); return () => window.clearInterval(id); }, [phase]);
+  useEffect(() => { if (phase !== "drive") return; const id = window.setInterval(() => { setKmh(tel.current.kmh); setProg(tel.current.prog); setRows(rowsRef.current); }, 100); return () => window.clearInterval(id); }, [phase]);
   useEffect(() => { arena.current?.setPaused(!!detail || board || !!ask); }, [detail, board, ask]);
 
   const prepare = useCallback((k: number) => {
-    const a = ACTIVITIES[k]; const f = freshScore(a); scoreRef.current = f; setScore(f);
+    const a = ACTIVITIES[k]; const f = freshScore(a); scoreRef.current = f; setScore(f); setRows([]); rowsRef.current = [];
     setChoice(null); setAi(k); setProg(0); setKmh(0); setPhase("ask");
   }, []);
 
@@ -79,6 +81,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
     setChoice(c); voice.stop(); setPhase("drive");
     arena.current.start(a.key, c.id, {
       onAuto: (on) => setAuto(on),
+      onCompare: (r) => { rowsRef.current = r; },
       onPop: (t, col) => setPop({ t, c: col, k: Date.now() + Math.random() }),
       onScore: (p) => { const n = { ...scoreRef.current, ...p }; scoreRef.current = n; setScore(n); },
       onTel: (kmh, prog) => { tel.current = { kmh, prog }; },
@@ -147,7 +150,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full transition-[width] duration-150" style={{ width: `${prog * 100}%`, background: act.color }} /></div>
             </div>
           </div>
-          <ScoreCard a={act} s={score} c={choice} />
+          <ScoreCard a={act} s={score} c={choice} rows={rows} />
           <Gauges kmh={kmh} a={act} s={score} />
         </>
       )}
@@ -169,6 +172,13 @@ export default function Drive({ onExit }: { onExit: () => void }) {
           </div>
         )}
       </AnimatePresence>
+      {started && phase === "ask" && coarse.current && !overlay && (
+        <div className="absolute inset-x-0 bottom-[150px] z-30 flex justify-between px-4">
+          <button type="button" aria-label="Steer into the left road" onPointerDown={() => arena.current?.setSteer(-1)} className="grid h-16 w-16 place-items-center rounded-full border border-white/30 bg-black/55 text-2xl active:bg-hazard active:text-ink">◀</button>
+          {act.choices.length === 3 && <button type="button" aria-label="Take the middle road" onPointerDown={() => arena.current?.pick(1)} className="grid h-16 w-16 place-items-center rounded-full border border-white/30 bg-black/55 text-2xl active:bg-hazard active:text-ink">▲</button>}
+          <button type="button" aria-label="Steer into the right road" onPointerDown={() => arena.current?.setSteer(1)} className="grid h-16 w-16 place-items-center rounded-full border border-white/30 bg-black/55 text-2xl active:bg-hazard active:text-ink">▶</button>
+        </div>
+      )}
       {driving && (coarse.current ? (
         <div className="absolute inset-x-0 bottom-0 z-10 flex justify-between p-4" style={{ paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
           {([-1, 1] as const).map((v) => (
@@ -185,7 +195,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
               className="w-full max-w-[600px] rounded-2xl border-2 border-hazard bg-oil/95 p-5 text-center shadow-[0_0_60px_rgba(242,183,5,.3)] md:p-6">
               <div className="font-mono text-[11px] font-bold tracking-[0.25em] text-hazard">THINK LIKE A FOUNDER</div>
               <h2 className="mt-1 font-stencil text-[32px] leading-none">FOUR CALLS. FOUR TEST DRIVES.</h2>
-              <p className="mt-2 text-[14.5px] text-paper/80">Pick a vertical, or play all four. You steer (the gas is automatic); steer into the road you'd take, then hear what I actually did.</p>
+              <p className="mt-2 text-[14.5px] text-paper/80">Pick a vertical, or play all four. Each one is a few seconds: steer into the road you'd take, see it play out, then hear what I actually did.</p>
               <div className="mt-4 grid grid-cols-2 gap-2 text-left sm:grid-cols-4">
                 {ACTIVITIES.map((a, k) => (
                   <button key={a.n} type="button" onClick={() => begin(k)} className="rounded-xl p-2.5 text-left transition-transform hover:-translate-y-0.5" style={{ background: a.color + "1f", border: `1px solid ${a.color}66` }}>
@@ -197,7 +207,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
                   </button>
                 ))}
               </div>
-              <div className="mt-2 font-mono text-[10.5px] tracking-wider text-[#36c8ff]">📊 DATA RUNS UNDER ALL FOUR · ABOUT 2 MINUTES</div>
+              <div className="mt-2 font-mono text-[10.5px] tracking-wider text-[#36c8ff]">📊 DATA RUNS UNDER ALL FOUR · ABOUT A MINUTE</div>
               <div className="mt-4 text-left font-mono text-[10.5px] tracking-[0.18em] text-paper/60">WHAT ARE YOU HIRING FOR?</div>
               <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Role you are hiring for">
                 {ROLES.map((r) => <button key={r.id} type="button" role="radio" aria-checked={role === r.id} onClick={() => setRole(r.id)} className={`rounded-full px-3 py-1.5 text-[13px] ${role === r.id ? "bg-hazard font-semibold text-ink" : "border border-white/20 text-paper/75 hover:border-white/50"}`}>{r.label}</button>)}
@@ -215,7 +225,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
       </AnimatePresence>
 
       <AnimatePresence>{started && phase === "ask" && !overlay && <ForkBanner key={`ask${ai}`} a={act} talk={talk} arena={arena.current} onChoose={choose} />}</AnimatePresence>
-      <AnimatePresence>{started && phase === "explain" && choice && !overlay && <ExplainCard key={`ex${ai}`} a={act} c={choice} s={score} role={role} talk={talk} nx={nextOpen(ai) >= 0 ? ACTIVITIES[nextOpen(ai)] : undefined} onNext={next} onMore={() => setDetail(act.card)} />}</AnimatePresence>
+      <AnimatePresence>{started && phase === "explain" && choice && !overlay && <ExplainCard key={`ex${ai}`} a={act} c={choice} s={score} rows={rowsRef.current} role={role} talk={talk} nx={nextOpen(ai) >= 0 ? ACTIVITIES[nextOpen(ai)] : undefined} onNext={next} onMore={() => setDetail(act.card)} />}</AnimatePresence>
       <AnimatePresence>{phase === "data" && !overlay && <DataCard log={log} talk={talk} onDone={() => { voice.stop(); setPhase("award"); }} />}</AnimatePresence>
 
       <Sheet open={isPart(detail)} onClose={resume} label="The full story">{isPart(detail) && <JobCardView id={detail} onBonnet={resume} />}</Sheet>
@@ -253,24 +263,19 @@ function ForkBanner({ a, talk, arena, onChoose }: { a: Activity; talk: boolean; 
   const keys = a.choices.length === 3 ? ["←", "↑", "→"] : ["←", "→"];
   return (
     <motion.div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
-      <div role="dialog" aria-label={`${a.vertical}: your call`} className="pointer-events-auto w-full max-w-[640px] rounded-2xl bg-oil/90 p-4 text-center backdrop-blur" style={{ boxShadow: `0 0 0 2px ${a.color}, 0 0 50px ${a.color}44` }}>
+      <div role="dialog" aria-label={`${a.vertical}: your call`} className="pointer-events-auto w-full max-w-[680px] rounded-2xl bg-black/65 px-4 py-3 text-center backdrop-blur-md" style={{ boxShadow: `0 0 0 2px ${a.color}, 0 0 50px ${a.color}44` }}>
         <div className="font-mono text-[10.5px] font-bold tracking-[0.25em]" style={{ color: a.color }}>{a.emoji} {a.title} · {a.n} OF {ACTIVITIES.length} · YOUR CALL · {a.world.toUpperCase()}</div>
         <p className="mx-auto mt-1.5 max-w-[34ch] font-cond text-[clamp(19px,2.8vw,25px)] font-semibold leading-tight">{a.question.text}</p>
-        <div className="mt-2.5 text-[13px] text-paper/70">{open ? <><b className="text-hazard">Steer into your call.</b> The road you take is your answer.</> : "🔊 Listen first. The barriers lift when I'm done."}</div>
-        <div className={`mt-2.5 grid gap-1.5 ${a.choices.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-          {a.choices.map((c, k) => (
-            <button key={c.id} type="button" disabled={!open} onClick={() => arena?.pick(k)} className="rounded-xl border border-white/15 bg-white/[.05] px-2 py-1.5 text-[12.5px] leading-tight transition-opacity enabled:hover:border-hazard disabled:opacity-40">
-              <span className="mr-1 font-mono font-bold text-hazard">{keys[k]}</span>{c.label}
-            </button>
-          ))}
-        </div>
+        <div className="mt-2 text-[13.5px] text-paper/75" aria-live="polite">{open
+          ? <><b className="text-hazard">Steer into your road.</b> {a.choices.map((c, k) => <span key={c.id} className="ml-2 whitespace-nowrap"><kbd className="rounded border border-white/25 px-1.5 font-mono text-[11px] text-hazard">{keys[k]}</kbd> {c.label}</span>)}</>
+          : "🔊 Listen first. The barriers lift when I'm done."}</div>
       </div>
     </motion.div>
   );
 }
 
 /** What this function means, what I did, and why it matters to you. Next unlocks once it has been heard. */
-function ExplainCard({ a, c, s, role, talk, nx, onNext, onMore }: { a: Activity; c: Choice; s: Score; role: RoleId; talk: boolean; nx?: Activity; onNext: () => void; onMore: () => void }) {
+function ExplainCard({ a, c, s, rows, role, talk, nx, onNext, onMore }: { a: Activity; c: Choice; s: Score; rows: LaneRow[]; role: RoleId; talk: boolean; nx?: Activity; onNext: () => void; onMore: () => void }) {
   const roleLabel = ROLES.find((x) => x.id === role)?.label ?? "your team";
   const lines: Line[] = [...a.explain, { key: `${a.key}-fit-${role}`, text: a.fit[role] }];
   const { i, done } = useNarration(lines, talk);
@@ -278,7 +283,7 @@ function ExplainCard({ a, c, s, role, talk, nx, onNext, onMore }: { a: Activity;
   const best = a.choices.find((x) => x.best)!;
   const yours = a.key === "road" ? (c.best ? "You took the mountain pass. So did I." : `The ${c.label.toLowerCase()} got you ${Math.round(s.prog * 100)}% of the way. I took the mountain pass.`)
     : a.key === "funnel" ? (c.best ? `You fixed the leaks: conversion hit ${s.conv}%.` : `More ads kept conversion at ${s.conv}%. I went after the leak.`)
-    : a.key === "orders" ? (c.best ? `One fix by hand, then the system routed round ${s.dodged}.` : `You fixed ${s.orders} problems by hand. I wrote the SOP once.`)
+    : a.key === "orders" ? (c.best ? `One fix by hand, then the system routed round ${s.dodged}.` : `You fixed ${s.orders} problem${s.orders === 1 ? "" : "s"} by hand. I wrote the SOP once.`)
     : (c.best ? `You grew assets to ${cr(s.aum)} and reached the oasis.` : `Flooring it ran the tank dry ${Math.round(s.prog * 100)}% of the way. I grew what we managed.`);
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Enter" && done) { e.preventDefault(); onNext(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [done, onNext]);
   return (
@@ -288,6 +293,20 @@ function ExplainCard({ a, c, s, role, talk, nx, onNext, onMore }: { a: Activity;
         <div className="p-5 md:p-6" style={{ background: `radial-gradient(circle at 50% 0%, ${a.color}40, transparent 70%)` }}>
           <div className="text-center font-mono text-[11px] font-bold tracking-[0.25em]" style={{ color: a.color }}>{a.emoji} {a.vertical.toUpperCase()} · WHAT I DID</div>
           <div className="mt-1 text-center text-[13.5px] text-paper/65">{yours}{!c.best && a.key !== "road" && <> <span className="text-paper/80">(My call: {best.label}.)</span></>}</div>
+          {rows.length > 0 && (
+            <div className={`mt-3 grid gap-1.5 ${rows.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+              {rows.map((r) => {
+                const mine = a.choices.find((x) => x.id === r.id)?.best;
+                return (
+                  <div key={r.id} className="rounded-lg border bg-white/[.04] p-2 text-center" style={{ borderColor: r.me ? a.color : "rgba(255,255,255,.12)" }}>
+                    <div className="font-mono text-[9.5px] font-bold tracking-wider text-paper/55">{r.me ? "YOUR ROAD" : "THE OTHER ROAD"}{mine ? " · MY CALL" : ""}</div>
+                    <div className="font-cond text-[14px] font-bold leading-tight">{r.label}</div>
+                    <div className="mt-0.5 text-[12px] font-semibold leading-tight" style={{ color: r.color }}>{r.text}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="mt-3 text-center font-stencil text-[clamp(34px,6vw,46px)] leading-none" style={{ color: a.color }}>{a.result[0]}</div>
           <div className="text-center text-[13.5px] text-paper/70">{a.result[1]}</div>
           <ol className="mt-4 space-y-1.5">
@@ -315,7 +334,7 @@ function ExplainCard({ a, c, s, role, talk, nx, onNext, onMore }: { a: Activity;
 }
 
 /** The scoreboard for the current game. */
-function ScoreCard({ a, s, c }: { a: Activity; s: Score; c: Choice | null }) {
+function ScoreCard({ a, s, c, rows }: { a: Activity; s: Score; c: Choice | null; rows: LaneRow[] }) {
   const bar = (v: number, max: number, col: string, mark?: number) => (
     <div className="relative mt-1 h-3 overflow-hidden rounded-full bg-white/10">
       <motion.div className="h-full rounded-full" style={{ background: col }} animate={{ width: `${Math.min(100, (v / max) * 100)}%` }} transition={{ type: "spring", stiffness: 90, damping: 15 }} />
@@ -334,6 +353,12 @@ function ScoreCard({ a, s, c }: { a: Activity; s: Score; c: Choice | null }) {
         <div className="flex justify-between"><span className={lab}>{s.auto ? "ROUTED BY THE SYSTEM" : "DODGED"}</span><b className="font-stencil" style={{ color: a.color }}>{s.dodged}</b></div></>}
       {a.key === "runway" && <><div className="mt-2 flex justify-between"><span className={lab}>ASSETS MANAGED</span><b className="font-stencil" style={{ color: a.color }}>{cr(s.aum)}</b></div>{bar(s.aum, 250, a.color)}
         <div className="mt-2 flex justify-between"><span className={lab}>FUEL = RUNWAY</span><b className={`font-mono text-[12px] ${s.fuel < 10 ? "text-rust" : ""}`}>{Math.round(s.fuel)}%</b></div>{bar(s.fuel, 100, s.fuel < 10 ? "#ef5350" : s.fuel < 30 ? "#ffca28" : "#66bb6a")}</>}
+      {rows.length > 0 && (
+        <div className="mt-3 border-t border-white/10 pt-2">
+          <div className={lab}>ALL ROADS, RIGHT NOW</div>
+          {rows.map((r) => <div key={r.id} className="mt-1 flex items-baseline justify-between gap-2 text-[12px]"><span className={r.me ? "font-semibold text-paper" : "text-paper/60"}>{r.me ? "▶ " : ""}{r.label}</span><span className="text-right font-semibold" style={{ color: r.color }}>{r.text}</span></div>)}
+        </div>
+      )}
     </div>
   );
 }

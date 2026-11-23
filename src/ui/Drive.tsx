@@ -32,6 +32,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
   const host = useRef<HTMLDivElement>(null);
   const arena = useRef<ArenaAPI | null>(null);
   const [auto, setAuto] = useState(false);
+  const [view, setView] = useState("chase");
   const music = useRef(createMusic());
   const [started, setStarted] = useState(false);
   const [phase, setPhase] = useState<Phase>("ask");
@@ -63,7 +64,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
     if (!host.current) return;
     const lowQ = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 760 || /[?&]low\b/.test(location.search);
     const a = createArena({ container: host.current, createBuggy, quality: lowQ ? "low" : "high" });
-    arena.current = a; a.preview(ACTIVITIES[0].key, ACTIVITIES[0].choices);
+    arena.current = a; a.onViewChange(setView); a.preview(ACTIVITIES[0].key, ACTIVITIES[0].choices);
     const m = music.current;
     return () => { a.dispose(); arena.current = null; m.dispose(); voice.stop(); };
   }, []);
@@ -120,6 +121,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
         <button type="button" onClick={onExit} className="mr-auto flex items-center gap-2 rounded-full border border-white/25 bg-black/45 px-4 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard"><ArrowLeft size={14} /> GARAGE</button>
         <button type="button" onClick={() => applyTalk(!talk)} aria-label={talk ? "Mute the narrator" : "Turn the narrator on"} title="Narrator" className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-black/45 backdrop-blur hover:border-hazard">{talk ? <Volume2 size={15} /> : <VolumeX size={15} />}</button>
         <button type="button" onClick={() => applySound(!sound)} aria-label={sound ? "Mute music" : "Turn music on"} title="Music" className={`grid h-10 w-10 place-items-center rounded-full border bg-black/45 backdrop-blur hover:border-hazard ${sound ? "border-white/25" : "border-white/10 opacity-50"}`}><Music2 size={15} /></button>
+        {driving && <button type="button" onClick={() => arena.current?.cycleView()} title="Change camera (C)" className="rounded-full border border-white/25 bg-black/45 px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider backdrop-blur hover:border-hazard">🎥 {view === "chase" ? "CHASE" : view === "driver" ? "DRIVER" : "WIDE"}</button>}
         {driving && <button type="button" onClick={() => arena.current?.setAuto(!auto)} aria-pressed={auto} className={`rounded-full border px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider backdrop-blur ${auto ? "border-hazard bg-hazard text-ink" : "border-white/25 bg-black/45 hover:border-hazard"}`}>AUTOPILOT {auto ? "ON" : "OFF"}</button>}
         <button type="button" onClick={() => setBoard(true)} className="flex items-center gap-2 rounded-full bg-hazard px-4 py-2.5 font-mono text-[11px] font-bold tracking-wider text-ink"><LayoutGrid size={14} /><span className="hidden sm:inline">SKIP TO THE WORK</span><span className="sm:hidden">WORK</span></button>
       </header>
@@ -186,7 +188,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
               onPointerDown={() => arena.current?.setSteer(v)} onPointerUp={() => arena.current?.setSteer(0)} onPointerLeave={() => arena.current?.setSteer(0)} onPointerCancel={() => arena.current?.setSteer(0)}>{v < 0 ? "◀" : "▶"}</button>
           ))}
         </div>
-      ) : <p className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 text-center font-mono text-[11px] tracking-[0.16em] text-paper/80">{auto ? "AUTOPILOT IS DRIVING · PRESS ← → TO TAKE THE WHEEL BACK" : "YOU'RE DRIVING · ← → OR A / D TO STEER · GAS IS AUTOMATIC · ↓ BRAKES"}</p>)}
+      ) : <p className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 text-center font-mono text-[11px] tracking-[0.16em] text-paper/80">{auto ? "AUTOPILOT · PRESS ← → TO TAKE THE WHEEL · C CHANGES CAMERA" : "← → STEER · ↓ BRAKE · C CHANGES CAMERA"}</p>)}
 
       <AnimatePresence>
         {!started && (

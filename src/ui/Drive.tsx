@@ -36,7 +36,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
   const [started, setStarted] = useState(false);
   const [phase, setPhase] = useState<Phase>("ask");
   const [sound, setSound] = useState(true);
-  const [talk, setTalk] = useState(true);
+  const [talk, setTalk] = useState(false);
   const [kmh, setKmh] = useState(0);
   const [prog, setProg] = useState(0);
   const [detail, setDetail] = useState<GateId | null>(null);
@@ -151,7 +151,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
             </div>
           </div>
           <ScoreCard a={act} s={score} c={choice} rows={rows} />
-          <Gauges kmh={kmh} a={act} s={score} />
+
         </>
       )}
 
@@ -243,6 +243,8 @@ function useNarration(lines: Line[], talk: boolean) {
   useEffect(() => {
     let alive = true;
     voice.setMuted(!talk);
+    // silent by default: everything is readable at once and nothing is locked
+    if (!talk) { setI(lines.length); setDone(true); return () => { alive = false; }; }
     voice.sayAll(lines, (k) => { if (alive) setI(k); }).then((ok) => { if (alive && ok !== false) { setI(lines.length); setDone(true); } });
     return () => { alive = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -257,6 +259,7 @@ function ForkBanner({ a, talk, arena, onChoose }: { a: Activity; talk: boolean; 
     let alive = true;
     arena?.decide(a.key, a.choices, (id) => { const c = a.choices.find((x) => x.id === id); if (c && alive) pick.current(c); });
     voice.setMuted(!talk);
+    if (!talk) { const id = window.setTimeout(() => { if (alive) { arena?.openGates(); setOpen(true); } }, 900); return () => { alive = false; window.clearTimeout(id); }; }
     voice.sayAll([a.question]).then((ok) => { if (alive && ok !== false) { arena?.openGates(); setOpen(true); } });
     return () => { alive = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -268,7 +271,7 @@ function ForkBanner({ a, talk, arena, onChoose }: { a: Activity; talk: boolean; 
         <p className="mx-auto mt-1.5 max-w-[34ch] font-cond text-[clamp(19px,2.8vw,25px)] font-semibold leading-tight">{a.question.text}</p>
         <div className="mt-2 text-[13.5px] text-paper/75" aria-live="polite">{open
           ? <><b className="text-hazard">Steer into your road.</b> {a.choices.map((c, k) => <span key={c.id} className="ml-2 whitespace-nowrap"><kbd className="rounded border border-white/25 px-1.5 font-mono text-[11px] text-hazard">{keys[k]}</kbd> {c.label}</span>)}</>
-          : "🔊 Listen first. The barriers lift when I'm done."}</div>
+          : "Get ready…"}</div>
       </div>
     </motion.div>
   );

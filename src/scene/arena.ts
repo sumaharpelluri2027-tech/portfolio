@@ -85,7 +85,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
   const { container } = opts, low = opts.quality === "low";
   const W = () => container.clientWidth || window.innerWidth, H = () => container.clientHeight || window.innerHeight;
   const renderer = new THREE.WebGLRenderer({ antialias: !low, powerPreference: "high-performance" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, low ? 1 : 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, low ? 1 : 1.5));
   renderer.setSize(W(), H());
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -151,7 +151,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     const f = scene.fog as THREE.Fog; f.color.set(th.fog); f.near = th.fogN; f.far = th.fogF; scene.background = null;
     hemi.color.set(th.hemiS); hemi.groundColor.set(th.hemiG); hemi.intensity = th.hemiI;
     key.color.set(th.key); key.intensity = th.keyI; renderer.toneMappingExposure = th.exp;
-    if (bloom) bloom.strength = th.bloom;
+    if (bloom) { bloom.strength = th.bloom; bloom.enabled = k === "funnel"; }
     // reflections for the buggy's metal, taken from this sky
     const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 24, 12), skyMat));
     const g = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshBasicMaterial({ color: th.hemiG })); g.rotation.x = -Math.PI / 2; g.position.y = -2; envScene.add(g);
@@ -179,7 +179,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
   const spins: THREE.Mesh[] = [];
   for (const sx of [-1, 1]) for (const z of [0.78, -0.8]) { const d = new THREE.Mesh(new THREE.CircleGeometry(0.27, 24), spinMat); d.position.set(sx * 0.77, 0.29, z); d.rotation.y = Math.PI / 2; carG.add(d); spins.push(d); }
   // speed lines streaming past the camera
-  const SL = low ? 0 : 70, slPos = new Float32Array(SL * 6), slSeed = new Float32Array(SL * 3);
+  const SL = 0, slPos = new Float32Array(SL * 6), slSeed = new Float32Array(SL * 3);
   for (let i = 0; i < SL; i++) { const a = Math.random() * Math.PI * 2, r = 2.2 + Math.random() * 3.5; slSeed.set([Math.cos(a) * r, Math.sin(a) * r * 0.7, Math.random()], i * 3); }
   const slGeo = new THREE.BufferGeometry(); slGeo.setAttribute("position", new THREE.BufferAttribute(slPos, 3));
   const slMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
@@ -390,11 +390,11 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
   }
 
   /* --- effects: dust/spray, confetti --- */
-  const DN = low ? 140 : 320;
+  const DN = low ? 90 : 160;
   const dPos = new Float32Array(DN * 3), dVel = new Float32Array(DN * 3), dAge = new Float32Array(DN).fill(9), dCol = new Float32Array(DN * 3);
   const dGeo = new THREE.BufferGeometry(); dGeo.setAttribute("position", new THREE.BufferAttribute(dPos, 3)); dGeo.setAttribute("color", new THREE.BufferAttribute(dCol, 3));
   const puffTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d")!; const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.5, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
-  const dust = new THREE.Points(dGeo, new THREE.PointsMaterial({ size: 0.7, map: puffTex, vertexColors: true, transparent: true, opacity: 0.6, depthWrite: false })); dust.frustumCulled = false; scene.add(dust);
+  const dust = new THREE.Points(dGeo, new THREE.PointsMaterial({ size: 0.7, map: puffTex, vertexColors: true, transparent: true, opacity: 0.35, depthWrite: false })); dust.frustumCulled = false; scene.add(dust);
   let dHead = 0; const dc = new THREE.Color();
   function emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, color: number) {
     const i = dHead++ % DN; dPos.set([x, y, z], i * 3); dVel.set([vx, vy, vz], i * 3); dAge[i] = 0; dc.set(color); dCol.set([dc.r, dc.g, dc.b], i * 3);
@@ -458,7 +458,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
   function laneTag(L: Lane, color: string) {
     const c = document.createElement("canvas"); c.width = 640; c.height = 150;
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, depthTest: false, fog: false })); s.scale.set(4.3, 1.0, 1); s.renderOrder = 9;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, fog: false })); s.scale.set(3.4, 0.8, 1); s.renderOrder = 9;
     L.tag = { c, t, s }; scene.add(s); void color;
   }
   function drawTag(L: Lane) {
@@ -485,42 +485,52 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
       if (li === climb && li >= 0) { const u = z - GATE; return u < 3 ? 0 : u < 26 ? 7 * smooth((u - 3) / 23) : u < 33 ? 7 : u < 50 ? 7 * (1 - smooth((u - 33) / 17)) : 0; }
       return 0;
     };
+    const rolling = k === "road" || k === "runway";
+    const base = (z: number) => (rolling ? 1.1 * Math.sin(z / 15) + 0.55 * Math.sin(z / 7 + 1.3) + 1.6 : 0);
+    const hills = (x: number, z: number) => { const d = Math.max(0, Math.abs(x) - outer - 2.5); if (!rolling || d <= 0) return base(z); const n = fbm(x * 0.025 + 3, z * 0.025); return base(z) + d * 0.18 + d * d * 0.006 * (k === "road" ? 1.3 : 0.7) + n * Math.min(d, 40) * (k === "road" ? 0.75 : 0.45); };
     const h = (x: number, z: number) => {
+      if (rolling) { const li = z >= GATE ? laneOf(x) : -1; if (Math.abs(x) <= outer + 0.8) return base(z) + (li >= 0 ? laneH(li, z) : 0); return hills(x, z); }
       if (k === "funnel") { if (z > GAP0 && z < LAND) return Math.abs(x) < outer + 2 ? -7 : 0; if (z >= RZ && z < RZ + RL && Math.abs(x) < outer) return RH * Math.pow((z - RZ) / RL, 1.4); return 0; }
       if (z < GATE) return 0; const li = laneOf(x); return li >= 0 ? laneH(li, z) : 0;
     };
     // --- ground and dressing
     const fg = new THREE.PlaneGeometry(500, 500); { const uv = fg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 55, uv.getY(i) * 55); }
     const groundTex = k === "road" ? "forest" : k === "funnel" ? "asphalt" : k === "orders" ? "concrete" : "sand";
-    const ground = new THREE.Mesh(fg, pbr(groundTex, k === "funnel" ? 0x2e2a3a : 0xffffff, 1)); ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.02, 100); ground.receiveShadow = true; g.add(ground);
+    if (rolling) {
+      g.add(terrain(-220, 220, -70, END + 280, low ? 4 : 3, (x, z) => hills(x, z) - 0.06, (x, z, y, c) => {
+        const n = fbm(x * 0.06, z * 0.06), hgt = y - base(z);
+        if (k === "road") c.setRGB(0.95, 1.05, 0.9).multiplyScalar(0.8 + n * 0.4).lerp(new THREE.Color(0.8, 0.78, 0.76), smooth((hgt - 14) / 10)).lerp(new THREE.Color(2.1, 2.1, 2.2), smooth((hgt - 30) / 8));
+        else c.setRGB(1.2, 1.0, 0.8).multiplyScalar(0.85 + n * 0.3).lerp(new THREE.Color(1.05, 0.72, 0.55), smooth((hgt - 8) / 10) * 0.6);
+      }, pbr(groundTex, 0xffffff, 1, 0, { vertexColors: true })));
+    } else { const ground = new THREE.Mesh(fg, pbr(groundTex, k === "funnel" ? 0x2e2a3a : 0xffffff, 1)); ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.02, 100); ground.receiveShadow = true; g.add(ground); }
     if (k === "funnel") { // the canal under the jump
       const hole = new THREE.Mesh(new THREE.BoxGeometry((outer + 2) * 2, 7.2, LAND - GAP0), std(0x05030c, 0.9)); hole.position.set(0, -3.5, (GAP0 + LAND) / 2); g.add(hole);
       const water = new THREE.Mesh(new THREE.PlaneGeometry((outer + 2) * 2, LAND - GAP0), std(0x0a1430, 0.08, 0.6, { emissive: 0x1a1060, emissiveIntensity: 0.5 })); water.rotation.x = -Math.PI / 2; water.position.set(0, -0.15, (GAP0 + LAND) / 2); g.add(water);
     }
     const roadTex = k === "runway" ? "dirt" : "asphalt", roadCol = k === "funnel" ? 0x4a4860 : k === "runway" ? 0xe0b890 : 0xa8a8a8;
-    g.add(road(GATE + 2, apHalf, () => 0, () => 0, pbr(roadTex, roadCol, k === "funnel" ? 0.3 : 0.85, k === "funnel" ? 0.15 : 0), -40, 6));
-    for (const sx of [-1, 1]) stripe(g, GATE + 1, () => 0, () => 0, sx * (apHalf - 0.3), 0.2, EDGE[k], false, -40, k === "funnel" ? 2.5 : 0);
+    g.add(road(GATE + 2, apHalf, () => 0, (x, z) => base(z), pbr(roadTex, roadCol, k === "funnel" ? 0.3 : 0.85, k === "funnel" ? 0.15 : 0), -40, 6));
+    for (const sx of [-1, 1]) stripe(g, GATE + 1, () => 0, (x, z) => base(z), sx * (apHalf - 0.3), 0.2, EDGE[k], false, -40, k === "funnel" ? 2.5 : 0);
     // each lane: its own surface, in the colour of what's on it
     const laneTex: Record<string, string> = { flat: "asphalt", mud: "mud", mountain: "dirt", ads: "asphalt", leak: "asphalt", fire: "asphalt", auto: "asphalt", burn: "dirt", aum: "dirt" };
     const laneTint: Record<string, number> = { flat: 0xa8a8a8, mud: 0x9a8a7a, mountain: 0xd8c8b0, ads: 0x4a4860, leak: 0x4a4860, fire: 0xb09090, auto: 0x98a898, burn: 0xd8a080, aum: 0xd8c098 };
     options.forEach((o, i) => {
-      const lh = (x: number, z: number) => laneH(i, z);
+      const lh = (x: number, z: number) => laneH(i, z) + base(z);
       const zEnd = k === "funnel" ? RZ : END + 30;
       g.add(road(zEnd, laneW / 2, () => xs[i], lh, pbr(laneTex[o.id] ?? roadTex, laneTint[o.id] ?? roadCol, o.id === "mud" ? 0.28 : k === "funnel" ? 0.3 : 0.85, k === "funnel" ? 0.15 : 0), GATE, 5));
       for (const sx of [-1, 1]) stripe(g, zEnd, () => xs[i], lh, sx * (laneW / 2 - 0.2), 0.16, EDGE[k], false, GATE, k === "funnel" ? 2.5 : 0);
       if (i === climb) { // rock walls under the climbing road
         const pos: number[] = [], idx: number[] = []; let v = 0;
-        for (const sx of [-1, 1]) { const x = xs[i] + sx * laneW / 2; for (let z = GATE; z <= GATE + 52; z += 1) { pos.push(x, laneH(i, z) + 0.03, z, x, 0, z); if (z > GATE) { idx.push(v - 2, v, v - 1, v - 1, v, v + 1); } v += 2; } }
+        for (const sx of [-1, 1]) { const x = xs[i] + sx * laneW / 2; for (let z = GATE; z <= GATE + 52; z += 1) { pos.push(x, laneH(i, z) + base(z) + 0.03, z, x, base(z) - 0.5, z); if (z > GATE) { idx.push(v - 2, v, v - 1, v - 1, v, v + 1); } v += 2; } }
         const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); sg.setIndex(idx); sg.computeVertexNormals();
         const uv: number[] = []; for (let j = 0; j < pos.length / 3; j++) uv.push(pos[j * 3 + 2] / 4, pos[j * 3 + 1] / 4); sg.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
         const wall = new THREE.Mesh(track(sg), pbr("rock", 0x9a9690, 1, 0, { side: THREE.DoubleSide })); wall.castShadow = wall.receiveShadow = true; g.add(wall);
         const rail = std(0xd8d4cc, 0.5, 0.6);
-        for (const sx of [-1, 1]) for (let z = GATE + 3; z < GATE + 50; z += 2.5) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), rail); p.position.set(xs[i] + sx * (laneW / 2 - 0.05), laneH(i, z) + 0.35, z); g.add(p); }
+        for (const sx of [-1, 1]) for (let z = GATE + 3; z < GATE + 50; z += 2.5) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), rail); p.position.set(xs[i] + sx * (laneW / 2 - 0.05), laneH(i, z) + base(z) + 0.35, z); g.add(p); }
       }
     });
     // dividers between lanes
     const jersey = pbr("concrete", 0xe0dcd4, 0.85), divEnd = k === "funnel" ? RZ - 2 : END + 6;
-    for (let i = 0; i < n - 1; i++) { const x = (xs[i] + xs[i + 1]) / 2; const d = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.95, divEnd - GATE), jersey); d.position.set(x, 0.47, (GATE + divEnd) / 2); d.castShadow = d.receiveShadow = true; g.add(d);
+    for (let i = 0; i < n - 1; i++) { const x = (xs[i] + xs[i + 1]) / 2; for (let z = GATE; z < divEnd; z += 3) { const d = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.95, 3.05), jersey); d.position.set(x, base(z + 1.5) + 0.47, z + 1.5); d.rotation.x = -Math.atan2(base(z + 3) - base(z), 3); d.castShadow = d.receiveShadow = true; g.add(d); }
       const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.1, 16), std(0xf2b705, 0.6)); nose.position.set(x, 0.55, GATE); g.add(nose); }
     // gantry, signs and barrier arms at the fork
     const steel = std(0x2a2d33, 0.45, 0.6);
@@ -551,7 +561,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     const side = outer + 6;
     if (k === "road") {
       const pg = pineGeo(), pm = std(0xffffff, 0.95, 0, { vertexColors: true });
-      g.add(scatter(pg, pm, low ? 200 : 420, (r) => { const sx = r() < 0.5 ? -1 : 1, x = sx * (side + Math.pow(r(), 1.5) * 70), z = -40 + r() * 200; return [x, 0, z, 0.9 + r() * 1.3, r() * 6]; }, 31));
+      g.add(scatter(pg, pm, low ? 200 : 420, (r) => { const sx = r() < 0.5 ? -1 : 1, x = sx * (side + Math.pow(r(), 1.5) * 70), z = -40 + r() * 200; const y = hills(x, z); if (y - base(z) > 26) return null; return [x, y - 0.1, z, 0.9 + r() * 1.3, r() * 6]; }, 31));
       const peakMat = pbr("rock", 0x8a90a0, 1), snowMat = std(0xf6f8ff, 0.55), pr = rng(4);
       for (let i = 0; i < 12; i++) { const ang = -1.1 + (i / 11) * 2.2, dist = 300 + pr() * 140, ph = 70 + pr() * 80, rad = 55 + pr() * 45;
         const cg = new THREE.ConeGeometry(rad, ph, 24, 6); { const pp = cg.attributes.position; for (let j = 0; j < pp.count; j++) { const a = Math.atan2(pp.getZ(j), pp.getX(j)), f = 1 + (fbm(a * 3 + i, pp.getY(j) * 0.03) - 0.5) * 0.5; pp.setX(j, pp.getX(j) * f); pp.setZ(j, pp.getZ(j) * f); } cg.computeVertexNormals(); }
@@ -595,7 +605,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     }
     if (k === "runway") {
       const cParts = [new THREE.CylinderGeometry(0.28, 0.32, 3.2, 10).translate(0, 1.6, 0), new THREE.CylinderGeometry(0.2, 0.2, 1.2, 10).translate(0.55, 2.2, 0), new THREE.CylinderGeometry(0.2, 0.2, 0.6, 10).rotateZ(Math.PI / 2).translate(0.3, 1.7, 0), new THREE.CylinderGeometry(0.2, 0.2, 1.0, 10).translate(-0.55, 1.9, 0), new THREE.CylinderGeometry(0.2, 0.2, 0.6, 10).rotateZ(Math.PI / 2).translate(-0.3, 1.45, 0)];
-      g.add(scatter(track(mergeGeometries(cParts)!), std(0x4a6b3a, 0.85), low ? 60 : 110, (r) => { const sx = r() < 0.5 ? -1 : 1; return [sx * (side + r() * 50), 0, -30 + r() * 200, 0.8 + r() * 0.7, r() * 6]; }, 17));
+      g.add(scatter(track(mergeGeometries(cParts)!), std(0x4a6b3a, 0.85), low ? 60 : 110, (r) => { const sx = r() < 0.5 ? -1 : 1; const x = sx * (side + r() * 50), z = -30 + r() * 200; return [x, hills(x, z) - 0.1, z, 0.8 + r() * 0.7, r() * 6]; }, 17));
       const mesa = pbr("rock", 0xd08a60, 1), mr = rng(12);
       for (let i = 0; i < 10; i++) { const r = 14 + mr() * 22, hh = 25 + mr() * 40;
         const mg = new THREE.CylinderGeometry(r * 0.85, r * 1.1, hh, 28, 6); { const pp = mg.attributes.position; for (let j = 0; j < pp.count; j++) { const a = Math.atan2(pp.getZ(j), pp.getX(j)), f = 1 + (fbm(a * 2.5 + i, pp.getY(j) * 0.08) - 0.5) * 0.35; pp.setX(j, pp.getX(j) * f); pp.setZ(j, pp.getZ(j) * f); } mg.computeVertexNormals(); }
@@ -610,42 +620,37 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
         for (let j = 0; j < 7; j++) { const lf = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 4), leaf); lf.position.set(0.4, 7, 0); lf.rotation.set(1.1, (j / 7) * Math.PI * 2, 0); lf.translateY(1.6); pg2.add(lf); }
         pg2.traverse((o) => { (o as THREE.Mesh).castShadow = true; }); g.add(pg2); }
     }
-    hoardings(g, END, outer + 0.5, () => 0, () => 0, k === "road" ? "#4fc3f7" : k === "funnel" ? "#ff5fb0" : k === "orders" ? "#f2b705" : "#66bb6a", (z) => k === "funnel" && z > RZ - 4 && z < LAND + 4, 9);
+    if (false) hoardings(g, END, outer + 0.5, () => 0, () => 0, k === "road" ? "#4fc3f7" : k === "funnel" ? "#ff5fb0" : k === "orders" ? "#f2b705" : "#66bb6a", (z) => k === "funnel" && z > RZ - 4 && z < LAND + 4, 9);
     // billboards: the work behind this vertical
     const B = side + 6;
     if (k === "road") {
       billboard(g, B, 0, GATE + 6, -2.25, "cover", "rabbit-invest", "B2C → B2B2C", "The pivot I proposed|and modelled at Rabbit Invest", "#4fc3f7");
-      billboard(g, -B, 0, GATE + 24, 2.25, "desk-night", "#THE KEN · GREAT REWIRING", "ROUND 2", "Arogya: an AI agent for|a family's health · national", "#7fc8ff");
-      billboard(g, B, 0, GATE + 44, -2.25, "clean", "#CLIENT · IKSHANA Z INC", "CLIENT SAID YES", "My Delaware incorporation|call, adopted by the client", "#2bff88");
       billboard(g, -B, 0, GATE + 62, 2.25, "studio-smile", "masters-union", "THINK LIKE A FOUNDER", "PGP-TBM, Masters' Union|VP, AI & Analytics Wing", "#f2b705");
     } else if (k === "funnel") {
       billboard(g, B, 0, GATE + 8, -2.25, "cover", "rabbit-invest", "10% → 50%", "Lead conversion|I found and fixed the leak", "#ff7043", 1.1);
-      billboard(g, -B, 0, mark(30), 2.25, "desk-night", "myntra", "FUNNELS FIRST", "Data analyst at Myntra|analysis → CEO-level call", "#ff5fb0", 1.1);
       billboard(g, B, 0, mark(45), -2.25, "img/decco-stall.webp", "#SALES · DECCO STORE", "₹3L IN 30 DAYS", "Our D2C brand: I sold|at the stall, ran the store", "#ff8a65", 1.1);
     } else if (k === "orders") {
       billboard(g, B + 3, 7.9, GATE + 6, -2.25, "clean", "rabbit-invest", "80% AUTOMATED", "Ops built from zero|Senior Associate → Lead", "#f2b705");
       billboard(g, -B - 3, 7.9, GATE + 28, 2.25, "studio-smile", "wipro", "100+ ACCOUNTS", "CRM reporting rebuilt|+40% pipeline visibility", "#3ad0ff");
-      billboard(g, B + 3, 7.9, GATE + 50, -2.25, "img/aiaw-site.webp", "ai-analytics-wing", "14 VERSIONS", "The Wing's website|designed and shipped by me", "#b48cff");
     } else {
       billboard(g, B, 0, GATE + 6, -2.25, "cover", "rabbit-invest", "₹2.5 CR AUM", "Year one, investing app|fund engine in 2–3 days", "#66bb6a");
       billboard(g, -B, 0, GATE + 30, 2.25, "img/boardiq.webp", "#LIVE · AI FOR INVESTORS", "BOARDIQ", "Checks the data first,|then shows the AI's working", "#f2b705");
-      billboard(g, B, 0, GATE + 56, -2.25, "clean", "rabbit-invest", "MVP · DAY ONE", "Exchange, KYC and paid APIs|set up with the founder", "#66bb6a");
     }
 
     /* --- the rules of each road --- */
     const pct = (c: Car) => Math.round(clamp((c.z - GATE) / LEN, 0, 1) * 100);
-    const base = (o: ForkOption, i: number): Lane => ({ id: o.id, label: o.label, x: xs[i], vmax: 14, acc: 9, dust: 0x9a8a7a, car: newCar(xs[i], GATE), obj: null, me: false, done: false, doneT: 0, tag: null, last: "", stat: () => ["", "#fff"], st: {} });
+    const mkLane = (o: ForkOption, i: number): Lane => ({ id: o.id, label: o.label, x: xs[i], vmax: 14, acc: 9, dust: 0x9a8a7a, car: newCar(xs[i], GATE), obj: null, me: false, done: false, doneT: 0, tag: null, last: "", stat: () => ["", "#fff"], st: {} });
     const said = new Set<string>(); const pop = (key: string, txt: string, col: string, L: Lane) => { if (L.me && !said.has(key)) { said.add(key); hooks?.onPop(txt, col); } };
     const extras = new THREE.Group(); g.add(extras);
     const L: Lane[] = options.map((o, i) => {
-      const ln = base(o, i), x0 = xs[i];
+      const ln = mkLane(o, i), x0 = xs[i];
       if (k === "road") {
         if (o.id === "flat") {
           ln.vmax = 15; ln.dust = 0x9a9a9a;
-          const cars = [0, 1, 2].map((j) => { const r = rivalCar(j * 2 + 1); r.g.position.set(x0, 0, GATE + 9 + j * 7); extras.add(r.g); return r.g; });
+          const cars = [0, 1, 2].map((j) => { const r = rivalCar(j * 2 + 1); r.g.position.set(x0, base(GATE + 9 + j * 7), GATE + 9 + j * 7); extras.add(r.g); return r.g; });
           const tag = label("FUNDED RIVALS · ₹₹₹", "#ef5350", "#ffffff", 0.9); tag.position.set(0, 3.4, 0); cars[0].add(tag);
           ln.st.rz = GATE + 9;
-          ln.tick = (dt, c, l) => { if (goT < 0) return; l.st.rz += 5.2 * dt; cars.forEach((cg, j) => { cg.position.z = l.st.rz + j * 7; cg.position.x = x0 + Math.sin(t * 1.4 + j) * 0.4; }); if (c.z > l.st.rz - 6.2) { c.z = Math.min(c.z, l.st.rz - 6); c.v = Math.min(c.v, 5.2); c.cap = 5.4; l.st.boxed = 1; pop("box", "BOXED IN BY FUNDED RIVALS", "#ef5350", l); } };
+          ln.tick = (dt, c, l) => { if (goT < 0) return; l.st.rz += 5.2 * dt; cars.forEach((cg, j) => { cg.position.z = l.st.rz + j * 7; cg.position.x = x0 + Math.sin(t * 1.4 + j) * 0.4; cg.position.y = base(cg.position.z); cg.rotation.x = -Math.atan2(base(cg.position.z + 1) - base(cg.position.z - 1), 2); }); if (c.z > l.st.rz - 6.2) { c.z = Math.min(c.z, l.st.rz - 6); c.v = Math.min(c.v, 5.2); c.cap = 5.4; l.st.boxed = 1; pop("box", "BOXED IN BY FUNDED RIVALS", "#ef5350", l); } };
           ln.stat = () => [ln.done ? `${pct(ln.car)}% · STILL BEHIND` : ln.st.boxed ? `${pct(ln.car)}% · BOXED IN` : `${pct(ln.car)}% · CROWDED`, "#ef5350"];
         } else if (o.id === "mud") {
           ln.vmax = 5.2; ln.acc = 3.5; ln.dust = 0x3a2614;
@@ -662,7 +667,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
         const pads = [GATE + 8, GATE + 18, GATE + 28], names = ["FOLLOW UP FAST", "SALES DASHBOARD", "AUTO LEAD FLOW"];
         pads.forEach((z, j) => {
           if (o.id === "leak") { const pad = new THREE.Mesh(new THREE.BoxGeometry(laneW - 2, 0.1, 2.6), std(0xff7043, 0.3, 0, { emissive: 0xff7043, emissiveIntensity: 1.1 })); pad.position.set(x0, 0.08, z); extras.add(pad);
-            const lb = label(names[j], "#ff7043", "#14110e", 0.6); lb.position.set(x0, 2.2, z + 1.2); extras.add(lb); }
+            const lb = label(names[j], "#ff7043", "#14110e", 0.42); lb.position.set(x0, 1.7, z + 1.2); extras.add(lb); }
           else { const scr = canvasTex(256, 160, (c2) => { c2.fillStyle = "#ff5fb0"; c2.fillRect(0, 0, 256, 160); c2.fillStyle = "#fff"; c2.font = `56px ${STENCIL}`; c2.textAlign = "center"; c2.fillText("BUY NOW!", 128, 80); c2.font = `24px ${MONO}`; c2.fillText("more leads, same leak", 128, 124); });
             const b = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.8), std(0xffffff, 0.5, 0, { map: scr, emissive: 0xffffff, emissiveMap: scr, emissiveIntensity: 1.1 })); b.position.set(x0 + Math.sign(x0) * (laneW / 2 + 1.6), 3.4, z); b.rotation.y = Math.PI - Math.sign(x0) * 0.6; extras.add(b); }
         });
@@ -721,7 +726,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
       } else {
         const burn = o.id === "burn"; ln.vmax = burn ? 21 : 14; ln.acc = burn ? 12 : 8; ln.dust = 0xd8b080; ln.st.fuel = 30; ln.st.aum = 10; ln.st.dry = 0;
         const cans = burn ? [] : [GATE + 12, GATE + 28, GATE + 44].map((z) => {
-          const ob = new THREE.Group(); ob.position.set(x0, 0.1, z);
+          const ob = new THREE.Group(); ob.position.set(x0, base(z) + 0.1, z);
           const b = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.0, 0.45), std(0xd32f2f, 0.35, 0.3)); b.position.y = 0.6; ob.add(b);
           const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 32), std(0x66bb6a, 0.5, 0, { emissive: 0x66bb6a, emissiveIntensity: 1.5, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; ob.add(ring);
           const lb = label("+₹80L", "#66bb6a", "#08140a", 0.75); lb.position.y = 2.2; ob.add(lb); ob.traverse((x) => { (x as THREE.Mesh).castShadow = true; }); extras.add(ob); return { z, ob, got: false };
@@ -894,13 +899,12 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
       const k = introT < 1.6 ? damp(2, dt) : damp(4.5, dt);
       camPos.lerp(want, k); camLook.lerp(wantLook, damp(6, dt));
       camera.position.copy(camPos);
-      if (shake > 0) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake = Math.max(0, shake - dt * 1.5); }
-      camera.fov += ((58 + (car.boostT > 0 ? 10 : 0) + clamp(car.v / 20, 0, 1) * 6) - camera.fov) * damp(4, dt); camera.updateProjectionMatrix();
+      shake = 0;
+      camera.fov += ((58 + (car.boostT > 0 ? 4 : 0) + clamp(car.v / 20, 0, 1) * 3) - camera.fov) * damp(2.5, dt); camera.updateProjectionMatrix();
     }
     camera.lookAt(camLook);
-    if (mode === "run") { const st = (keys.has("arrowleft") || keys.has("a") ? 1 : 0) - (keys.has("arrowright") || keys.has("d") ? 1 : 0); steerS += ((car.yaw * 0.08 + st * 0.03) - steerS) * damp(4, dt); camera.rotateZ(steerS); }
     const th = THEMES[kind], sd = new THREE.Vector3(...th.sunDir).normalize();
-    key.position.set(car.x + sd.x * 60 + 10, car.y + 45, car.z + sd.z * 60 - 10); key.target.position.set(car.x, car.y, car.z + 6);
+    const sx0 = Math.round(car.x / 2) * 2, sz0 = Math.round(car.z / 2) * 2, sy0 = Math.round(car.y); key.position.set(sx0 + sd.x * 60 + 10, sy0 + 45, sz0 + sd.z * 60 - 10); key.target.position.set(sx0, sy0, sz0 + 6);
     sky.position.copy(camera.position);
   }
 
@@ -925,7 +929,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     const sp = mode === "run" ? clamp((car.v - 9) / 10, 0, 1) + (boosting ? 0.6 : 0) : 0;
     if (SL) { slMat.opacity = sp * 0.5; for (let i = 0; i < SL; i++) { let ph = slSeed[i * 3 + 2] + dt * (1.5 + car.v * 0.12); ph -= Math.floor(ph); slSeed[i * 3 + 2] = ph; const z0 = -30 + ph * 28, L = 1.5 + sp * 4; slPos.set([slSeed[i * 3], slSeed[i * 3 + 1], z0, slSeed[i * 3] * 1.04, slSeed[i * 3 + 1] * 1.04, z0 + L], i * 6); } slGeo.attributes.position.needsUpdate = true; }
     // keep it smooth: if the device can't hold ~40 fps, drop resolution and the heaviest effects
-    if (!degraded && dt > 0 && mode === "run") { fpsT += dt; fpsN++; if (fpsT > 2.5) { if (fpsN / fpsT < 34) { degraded = true; renderer.setPixelRatio(Math.max(1, Math.min(window.devicePixelRatio, 1.25))); if (bloom) bloom.enabled = kind === "funnel"; onResize(); } fpsT = 0; fpsN = 0; } }
+    void degraded; void fpsT; void fpsN;
     buggy.update(dt, t); ghosts.forEach((b) => b.update(dt, t));
     updateCamera(dt);
     if (composer) composer.render(); else renderer.render(scene, camera);

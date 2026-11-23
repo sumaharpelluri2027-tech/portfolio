@@ -136,7 +136,7 @@ export const ACTIVITIES: Activity[] = [
 export const DATA_FINALE = {
   title: "DATA RAN EVERY STEP",
   lines: [
-    { key: "data-1", text: "Did you notice the gauges? Data ran every step." },
+    { key: "data-1", text: "Every number you watched on the road was data." },
     { key: "data-2", text: "At Rabbit Invest, investor data was half right." },
     { key: "data-3", text: "I built checks that stop bad data at the source." },
     { key: "data-4", text: "Accuracy went from 50 to 95 percent." },

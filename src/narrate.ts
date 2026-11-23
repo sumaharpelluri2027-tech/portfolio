@@ -7,7 +7,7 @@ import { A } from "./data";
 export const RECORDED = new Set<string>([]);
 
 let audio: HTMLAudioElement | null = null;
-let muted = false;
+let muted = true; // the site is silent unless the visitor turns the narrator on
 let token = 0;
 let run = 0;
 const listeners = new Set<(line: string | null) => void>();

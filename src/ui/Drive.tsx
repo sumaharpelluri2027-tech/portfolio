@@ -17,7 +17,7 @@ const isPart = (g: GateId | null): g is CarPart => !!g && g in JOBS;
 type Score = GameScore;
 const freshScore = (a?: Activity): Score => ({ conv: 10, orders: 0, auto: false, fuel: a?.key === "runway" ? 30 : 100, aum: 10, rivals: 0, dodged: 0, prog: 0 });
 const cr = (lakh: number) => (lakh >= 100 ? `₹${(lakh / 100).toFixed(1)} Cr` : `₹${Math.round(lakh)}L`);
-type Phase = "ask" | "drive" | "explain" | "data" | "award";
+type Phase = "ask" | "drive" | "result" | "explain" | "data" | "award";
 const TASK: Record<Activity["key"], string> = { road: "Hill climb: pick the road", funnel: "Ramp jump: hit the target", orders: "Yard: handle what hits you", runway: "Desert: make the fuel last" };
 /** the backdrop behind the cards, in each world's colours */
 const BACK: Record<Activity["key"], string> = {
@@ -58,6 +58,7 @@ export default function Drive({ onExit }: { onExit: () => void }) {
   const act = ACTIVITIES[ai];
 
   useEffect(() => voice.onCaption(setCap), []);
+  useEffect(() => { const was = voice.isMuted(); voice.setMuted(true); return () => voice.setMuted(was); }, []);
   useEffect(() => { if (!pop) return; const id = window.setTimeout(() => setPop(null), 1700); return () => window.clearTimeout(id); }, [pop]);
   // one 3D arena for the whole session; the first course idles behind the start screen
   useEffect(() => {
@@ -89,7 +90,8 @@ export default function Drive({ onExit }: { onExit: () => void }) {
       onDone: () => {
         setLog((l) => [...l, { a, c, s: scoreRef.current }]);
         music.current.sting(a.n === ACTIVITIES.length ? "finish" : "all");
-        setPhase("explain");
+        setRows(rowsRef.current); setPhase("result");
+        window.setTimeout(() => setPhase((p) => (p === "result" ? "explain" : p)), 2200);
       },
     });
     if (talk) voice.say(c.outcome.text, c.outcome.key);
@@ -121,7 +123,6 @@ export default function Drive({ onExit }: { onExit: () => void }) {
         <button type="button" onClick={onExit} className="mr-auto flex items-center gap-2 rounded-full border border-white/25 bg-black/45 px-4 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard"><ArrowLeft size={14} /> GARAGE</button>
         <button type="button" onClick={() => applyTalk(!talk)} aria-label={talk ? "Mute the narrator" : "Turn the narrator on"} title="Narrator" className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-black/45 backdrop-blur hover:border-hazard">{talk ? <Volume2 size={15} /> : <VolumeX size={15} />}</button>
         <button type="button" onClick={() => applySound(!sound)} aria-label={sound ? "Mute music" : "Turn music on"} title="Music" className={`grid h-10 w-10 place-items-center rounded-full border bg-black/45 backdrop-blur hover:border-hazard ${sound ? "border-white/25" : "border-white/10 opacity-50"}`}><Music2 size={15} /></button>
-        {driving && <button type="button" onClick={() => arena.current?.cycleView()} title="Change camera (C)" className="rounded-full border border-white/25 bg-black/45 px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider backdrop-blur hover:border-hazard">🎥 {view === "chase" ? "CHASE" : view === "driver" ? "DRIVER" : "WIDE"}</button>}
         {driving && <button type="button" onClick={() => arena.current?.setAuto(!auto)} aria-pressed={auto} className={`rounded-full border px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider backdrop-blur ${auto ? "border-hazard bg-hazard text-ink" : "border-white/25 bg-black/45 hover:border-hazard"}`}>AUTOPILOT {auto ? "ON" : "OFF"}</button>}
         <button type="button" onClick={() => setBoard(true)} className="flex items-center gap-2 rounded-full bg-hazard px-4 py-2.5 font-mono text-[11px] font-bold tracking-wider text-ink"><LayoutGrid size={14} /><span className="hidden sm:inline">SKIP TO THE WORK</span><span className="sm:hidden">WORK</span></button>
       </header>
@@ -152,11 +153,32 @@ export default function Drive({ onExit }: { onExit: () => void }) {
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full transition-[width] duration-150" style={{ width: `${prog * 100}%`, background: act.color }} /></div>
             </div>
           </div>
-          <ScoreCard a={act} s={score} c={choice} rows={rows} />
+          {view !== "driver" && <ScoreCard a={act} s={score} c={choice} rows={rows} />}
+          {view === "driver" && <DriverDash a={act} s={score} kmh={kmh} rows={rows} />}
 
         </>
       )}
 
+      {started && (phase === "drive" || phase === "ask") && !overlay && (
+        <div className="absolute bottom-4 right-4 z-[36] flex overflow-hidden rounded-full border border-white/20 bg-black/60 p-1 backdrop-blur md:bottom-6 md:right-6" role="radiogroup" aria-label="Camera">
+          {([["chase", "🏎️ CAR"], ["driver", "🪖 DRIVER"], ["wide", "🛰️ WIDE"]] as const).map(([v, l]) => (
+            <button key={v} type="button" role="radio" aria-checked={view === v} onClick={() => arena.current?.setView(v)} className={`rounded-full px-3 py-2 font-mono text-[11px] font-bold tracking-wider ${view === v ? "bg-hazard text-ink" : "text-paper/75 hover:text-paper"}`}>{l}</button>
+          ))}
+        </div>
+      )}
+      <AnimatePresence>
+        {phase === "result" && (
+          <motion.div key="res" className="pointer-events-none absolute inset-0 z-30 grid place-items-center bg-black/30 px-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div initial={{ scale: 0.85, y: 20 }} animate={{ scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 240, damping: 18 }} className="text-center">
+              <div className="font-mono text-[12px] font-bold tracking-[0.3em]" style={{ color: act.color }}>{act.emoji} {act.title} · FINISH</div>
+              {rows.filter((r) => r.me).map((r) => <div key={r.id} className="mt-1 font-stencil text-[clamp(38px,7vw,72px)] leading-none drop-shadow-[0_4px_20px_rgba(0,0,0,.8)]" style={{ color: r.color }}>{r.text}</div>)}
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {rows.filter((r) => !r.me).map((r) => <span key={r.id} className="rounded-full bg-black/70 px-3 py-1.5 text-[13px] text-paper/85">{r.label}: <b style={{ color: r.color }}>{r.text}</b></span>)}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {pop && driving && (
           <div key={pop.k} className="pointer-events-none absolute inset-x-0 top-[30%] z-20 flex justify-center px-4">
@@ -271,9 +293,15 @@ function ForkBanner({ a, talk, arena, onChoose }: { a: Activity; talk: boolean; 
       <div role="dialog" aria-label={`${a.vertical}: your call`} className="pointer-events-auto w-full max-w-[680px] rounded-2xl bg-black/65 px-4 py-3 text-center backdrop-blur-md" style={{ boxShadow: `0 0 0 2px ${a.color}, 0 0 50px ${a.color}44` }}>
         <div className="font-mono text-[10.5px] font-bold tracking-[0.25em]" style={{ color: a.color }}>{a.emoji} {a.title} · {a.n} OF {ACTIVITIES.length} · YOUR CALL · {a.world.toUpperCase()}</div>
         <p className="mx-auto mt-1.5 max-w-[34ch] font-cond text-[clamp(19px,2.8vw,25px)] font-semibold leading-tight">{a.question.text}</p>
-        <div className="mt-2 text-[13.5px] text-paper/75" aria-live="polite">{open
-          ? <><b className="text-hazard">Steer into your road.</b> {a.choices.map((c, k) => <span key={c.id} className="ml-2 whitespace-nowrap"><kbd className="rounded border border-white/25 px-1.5 font-mono text-[11px] text-hazard">{keys[k]}</kbd> {c.label}</span>)}</>
-          : "Get ready…"}</div>
+        <div className={`mt-2.5 grid gap-1.5 ${a.choices.length === 3 ? "grid-cols-3" : "grid-cols-2"}`} aria-live="polite">
+          {a.choices.map((c, k) => (
+            <div key={c.id} className={`rounded-xl border px-2 py-1.5 transition-opacity ${open ? "border-white/20 bg-white/[.06]" : "border-white/10 opacity-50"}`}>
+              <kbd className="mr-1.5 rounded bg-hazard px-1.5 font-mono text-[12px] font-bold text-ink">{keys[k]}</kbd><span className="text-[13.5px] font-semibold">{c.label}</span>
+              <div className="text-[11.5px] leading-tight text-paper/55">{c.sub}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 font-mono text-[10.5px] tracking-wider text-paper/55">{open ? "STEER INTO A ROAD · THE OTHER ROADS RACE BESIDE YOU · CAMERA: BOTTOM RIGHT" : "GATES OPENING…"}</div>
       </div>
     </motion.div>
   );
@@ -312,16 +340,17 @@ function ExplainCard({ a, c, s, rows, role, talk, nx, onNext, onMore }: { a: Act
               })}
             </div>
           )}
-          <div className="mt-3 text-center font-stencil text-[clamp(34px,6vw,46px)] leading-none" style={{ color: a.color }}>{a.result[0]}</div>
-          <div className="text-center text-[13.5px] text-paper/70">{a.result[1]}</div>
-          <ol className="mt-4 space-y-1.5">
-            {a.explain.map((l, k) => (
-              <motion.li key={l.key} initial={{ opacity: 0.25 }} animate={{ opacity: i >= k ? 1 : 0.25 }} className="flex items-start gap-2.5 text-[15.5px] leading-snug">
-                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full font-mono text-[10px] font-bold text-ink" style={{ background: i >= k ? a.color : "rgba(255,255,255,.2)" }}>{k + 1}</span>
-                <span className={i === k ? "font-semibold text-paper" : "text-paper/85"}>{l.text}</span>
-              </motion.li>
-            ))}
-          </ol>
+          <div className="mt-4 rounded-2xl bg-white/[.04] p-4">
+            <div className="font-mono text-[10px] font-bold tracking-[0.22em]" style={{ color: a.color }}>THE LESSON</div>
+            <p className="mt-0.5 font-cond text-[21px] font-semibold leading-tight">{a.explain[0].text}</p>
+            <div className="mt-3 flex items-end gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="font-mono text-[10px] font-bold tracking-[0.22em] text-paper/55">WHAT I DID</div>
+                <ul className="mt-1 space-y-1">{a.explain.slice(1).map((l, k) => <motion.li key={l.key} animate={{ opacity: i >= k + 1 ? 1 : 0.35 }} className="flex gap-2 text-[14.5px] leading-snug"><span style={{ color: a.color }}>▸</span>{l.text}</motion.li>)}</ul>
+              </div>
+              <div className="shrink-0 text-right"><div className="font-stencil text-[clamp(30px,5vw,42px)] leading-none" style={{ color: a.color }}>{a.result[0]}</div><div className="max-w-[16ch] text-[11.5px] leading-tight text-paper/60">{a.result[1]}</div></div>
+            </div>
+          </div>
           <motion.div animate={{ opacity: i >= a.explain.length ? 1 : 0.3 }} className="mt-4 rounded-xl border-l-4 bg-white/[.05] p-3" style={{ borderColor: a.color }}>
             <div className="font-mono text-[10px] font-bold tracking-[0.2em] text-hazard">FOR YOUR {roleLabel.toUpperCase()} ROLE</div>
             <p className="mt-1 text-[15px] leading-snug">{a.fit[role]}</p>
@@ -364,6 +393,22 @@ function ScoreCard({ a, s, c, rows }: { a: Activity; s: Score; c: Choice | null;
           {rows.map((r) => <div key={r.id} className="mt-1 flex items-baseline justify-between gap-2 text-[12px]"><span className={r.me ? "font-semibold text-paper" : "text-paper/60"}>{r.me ? "▶ " : ""}{r.label}</span><span className="text-right font-semibold" style={{ color: r.color }}>{r.text}</span></div>)}
         </div>
       )}
+    </div>
+  );
+}
+
+/** In the driver's seat, the data sits where a driver looks: a dash across the bottom. */
+function DriverDash({ a, s, kmh, rows }: { a: Activity; s: Score; kmh: number; rows: LaneRow[] }) {
+  const kpi = a.key === "road" ? [`${Math.round(s.prog * 100)}%`, "TO MARKET LEAD"] : a.key === "funnel" ? [`${s.conv}%`, "CONVERSION · TARGET 50%"] : a.key === "orders" ? [`${s.orders}`, `FIXED BY HAND · ${s.dodged} AUTO`] : [cr(s.aum), `ASSETS · FUEL ${Math.round(s.fuel)}%`];
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-[64px] z-10 flex justify-center px-4">
+      <div className="flex items-stretch gap-3 rounded-2xl border border-[#36c8ff55] bg-[#04101a]/85 px-4 py-2.5 shadow-[0_0_40px_rgba(54,200,255,.25)] backdrop-blur">
+        <div className="text-center"><div className="font-stencil text-[34px] leading-none text-[#36c8ff]">{Math.round(kmh)}</div><div className="font-mono text-[9px] tracking-[0.2em] text-paper/55">KM/H</div></div>
+        <div className="w-px bg-white/15" />
+        <div className="text-center"><div className="font-stencil text-[34px] leading-none" style={{ color: a.color }}>{kpi[0]}</div><div className="font-mono text-[9px] tracking-[0.2em] text-paper/55">{kpi[1]}</div></div>
+        {rows.length > 0 && <><div className="w-px bg-white/15" />
+          <div className="flex flex-col justify-center gap-0.5">{rows.map((r) => <div key={r.id} className="flex gap-2 text-[11.5px]"><span className={r.me ? "font-bold text-paper" : "text-paper/55"}>{r.me ? "▶ YOU" : r.label}</span><span className="font-semibold" style={{ color: r.color }}>{r.text}</span></div>)}</div></>}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, ChevronUp, Download, Lightbulb, FileText, Route, Flag, LayoutGrid, MessageCircle, Music2, Pause, X } from "lucide-react";
+import { ArrowRight, ChevronUp, Download, Lightbulb, FileText, Route, Flag, LayoutGrid, MessageCircle, Music2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
+import * as voice from "./narrate";
 import { GuideCard, HelpMenu, QuickView, TOUR } from "./ui/Guide";
 import { createGarage, type GarageAPI } from "./scene/garage";
 import { createBuggy } from "./scene/buggyEntry";
@@ -122,6 +123,7 @@ function Garage() {
     return () => { window.clearTimeout(t); g.dispose(); api.current = null; };
   }, []);
   const selectRef = useRef(select); selectRef.current = select;
+  const [voiceOn, setVoiceOn] = useState(() => !voice.isMuted());
   const [lights, setLights] = useState<"full" | "normal">(() => { try { return (localStorage.getItem("sp-lightmode") as "full" | "normal") || "full"; } catch { return "full"; } });
   useEffect(() => { api.current?.setLights(lights); try { localStorage.setItem("sp-lightmode", lights); } catch { /* ignore */ } }, [lights]);
   useEffect(() => {
@@ -249,6 +251,8 @@ function Garage() {
           <span className="grid h-10 w-10 place-items-center rounded bg-hazard font-stencil text-lg text-ink">SP</span>
           <span className="leading-tight"><span className="block font-stencil text-[17px] tracking-wide sm:text-[19px]">SUMAHAR PELLURI</span><span className="hidden font-mono text-[10.5px] tracking-[0.18em] text-paper/60 sm:block">FOUNDER'S OFFICE · OPERATIONS · DATA</span></span>
         </a>
+        {guide !== "tour" && <button type="button" onClick={startTour} className="flex items-center gap-2 rounded-full bg-hazard px-4 py-2.5 font-mono text-[11px] font-bold tracking-wider text-ink shadow-[0_0_24px_rgba(242,183,5,.45)] hover:brightness-110"><Play size={13} fill="currentColor" /><span>1-MIN TOUR</span></button>}
+        <button type="button" onClick={() => { const v = !voiceOn; setVoiceOn(v); voice.setMuted(!v); }} aria-pressed={voiceOn} aria-label={voiceOn ? "Mute my voice" : "Turn my voice on"} title="Narration" className="grid h-10 w-10 place-items-center rounded-full border border-white/25 bg-ink/60 backdrop-blur hover:border-hazard">{voiceOn ? <Volume2 size={15} /> : <VolumeX size={15} />}</button>
         <button type="button" onClick={() => { setOpen(null); setBoard("all"); }} className="flex items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider backdrop-blur hover:border-hazard"><LayoutGrid size={14} /><span className="hidden sm:inline">PROJECTS</span></button>
         <button type="button" onClick={() => select("journey")} className="hidden items-center gap-2 rounded-full border border-white/25 bg-ink/60 px-3.5 py-2.5 font-mono text-[11px] tracking-wider backdrop-blur hover:border-hazard md:flex"><Route size={14} />JOURNEY</button>
         <a href={A("Sumahar-Pelluri-CV.pdf")} download="Sumahar-Pelluri-CV.pdf" target="_blank" rel="noopener" className="flex items-center gap-2 rounded-full border border-hazard/70 bg-hazard/15 px-3.5 py-2.5 font-mono text-[11px] font-bold tracking-wider text-hazard backdrop-blur hover:bg-hazard hover:text-ink"><Download size={14} /><span className="hidden sm:inline">CV</span></a>

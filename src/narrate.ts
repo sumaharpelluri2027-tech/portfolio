@@ -7,7 +7,7 @@ import { A } from "./data";
 export const RECORDED = new Set<string>([]);
 
 let audio: HTMLAudioElement | null = null;
-let muted = true; // the site is silent unless the visitor turns the narrator on
+let muted = false; // the garage narrates; the game mutes itself while you drive
 let token = 0;
 let run = 0;
 const listeners = new Set<(line: string | null) => void>();

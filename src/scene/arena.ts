@@ -38,6 +38,7 @@ export interface ArenaAPI {
   /** chase → driver's seat → wide; returns the new view */
   cycleView(): "chase" | "driver" | "wide";
   onViewChange(f: (v: string) => void): void;
+  setView(v: "chase" | "driver" | "wide"): void;
   dispose(): void;
 }
 
@@ -1001,6 +1002,7 @@ export function createArena(opts: { container: HTMLElement; createBuggy: () => B
     start(_k, _choice, h) { hooks = h; mode = "run"; running = true; keys.clear(); h.onAuto?.(auto); },
     cycleView() { view = view === "chase" ? "driver" : view === "driver" ? "wide" : "chase"; onView?.(view); return view; },
     onViewChange(f) { onView = f; },
+    setView(v) { view = v; onView?.(v); },
     setAuto(on) { auto = on; hooks?.onAuto?.(on); },
     setSteer(v) { if (mode === "decide") { if (v) forkKey(v < 0 ? "arrowleft" : "arrowright"); return; } touchSteer = v; if (v !== 0 && auto && running) { auto = false; hooks?.onAuto?.(false); } },
     setPaused(p) { paused = p; },
